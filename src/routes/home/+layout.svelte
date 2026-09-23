@@ -30,7 +30,8 @@
   } from '$lib/keyboard';
   import { supportsKeyboardShortcuts } from '$lib/platform';
   import { extensionsStore } from '$lib/extensions.svelte';
-  import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+  import { comExtStore } from '$lib/com-ext.svelte';
+  import { COMMUNITY_EXT_ENABLED, USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { isIconName } from '$lib/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
   import { transitionOutOfSession } from '$lib/session-exit';
@@ -109,6 +110,20 @@
           })),
         )
       : []),
+    // Community plugins are a separate interface with their own navigation
+    // entries, so they appear here alongside — never merged into — the official
+    // list above.
+    ...(COMMUNITY_EXT_ENABLED
+      ? comExtStore.enabledInstallations.flatMap((installation) =>
+          installation.manifest.entrypoints.navigation.map((entry) => ({
+            id: `com-ext:${installation.manifest.id}:${entry.id}`,
+            label: entry.label,
+            href: `/home/com-ext/view?plugin=${encodeURIComponent(installation.manifest.id)}&page=${encodeURIComponent(entry.page)}`,
+            icon: isIconName(entry.icon) ? entry.icon : 'extensions',
+            exact: true,
+          })),
+        )
+      : []),
   ]);
 
   const bottomNavigation = $derived<WorkspaceNavItem[]>([
@@ -141,6 +156,14 @@
         ?? installation?.manifest.name
         ?? $t('settings.extensions.title');
     }
+    if (path === '/home/com-ext/view') {
+      const pluginId = $page.url.searchParams.get('plugin');
+      const pageId = $page.url.searchParams.get('page');
+      const installation = comExtStore.enabledInstallations.find((item) => item.manifest.id === pluginId);
+      return installation?.manifest.entrypoints.navigation.find((entry) => entry.page === pageId)?.label
+        ?? installation?.manifest.name
+        ?? $t('settings.comExt.title');
+    }
     if (path === '/home/trash') return $t('workspace.recycleBin');
     if (path === '/home/manage') return $t('workspace.administration');
     if (path === '/home/schedules') return $t('workspace.schedules');
@@ -170,6 +193,13 @@
       ? `${serverStateStore.remoteAddress ?? ''}:${authStore.username}`
       : null;
     void extensionsStore.activateForAccount(scope);
+  });
+
+  // Community plugin state is device-wide rather than per-account, so it is
+  // loaded once. The management page refreshes the same store after an install,
+  // enable, or uninstall, and this layout's navigation follows it reactively.
+  onMount(() => {
+    if (COMMUNITY_EXT_ENABLED) void comExtStore.refresh();
   });
 
   onMount(() => {

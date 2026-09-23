@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { DeclarativePage, DeclarativeWorkflow } from '$lib/api/extensions';
 
 /**
  * Community plugin (`com_ext`) IPC surface.
@@ -7,6 +8,15 @@ import { invoke } from '@tauri-apps/api/core';
  * commands.  The two never share a package format, storage root, state, or
  * capability set, so both can be used at the same time.
  */
+
+/**
+ * The declarative page and workflow vocabulary is deliberately shared with the
+ * official interface: both renderers consume the same block shapes, and two
+ * copies of the same union would drift apart.  Re-exported here so community
+ * consumers have a single import site.  This is a type-only dependency and
+ * carries no state or behaviour across the two interfaces.
+ */
+export type { DeclarativeBlock, DeclarativePage, DeclarativeWorkflow } from '$lib/api/extensions';
 
 export type ComExtCapability =
   | 'files.list'
@@ -132,30 +142,6 @@ export interface ComExtOverview {
   capabilities: ComExtCapability[];
   packageExtension: string;
   root: string;
-}
-
-export interface DeclarativePage {
-  schema_version: number;
-  title: string;
-  description?: string;
-  blocks: DeclarativeBlock[];
-}
-
-export type DeclarativeBlock =
-  | { type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' }
-  | { type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }
-  | { type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' }
-  | { type: 'progress'; label: string; value: number; max?: number }
-  | { type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> }
-  | { type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> }
-  | { type: 'empty_state'; title: string; description?: string }
-  | { type: 'form'; id: string; fields: Array<{ id: string; label: string; type: 'text' | 'number' | 'toggle' | 'select'; options?: string[]; default?: unknown }> }
-  | { type: 'actions'; actions: Array<{ id: string; label: string; workflow: string; tone?: 'primary' | 'secondary' | 'danger' }> };
-
-export interface DeclarativeWorkflow {
-  schema_version: number;
-  start: string;
-  nodes: Array<Record<string, unknown> & { id: string; type: string }>;
 }
 
 export function getComExtOverview(): Promise<ComExtOverview> {

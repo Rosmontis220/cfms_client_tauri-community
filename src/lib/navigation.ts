@@ -22,6 +22,7 @@ const HOME_SECONDARY_PARENT_ROUTES = new Map([
   ['/home/settings', '/home/more'],
   ['/home/trash', '/home/more'],
   ['/home/extensions/view', '/home/overview'],
+  ['/home/com-ext/view', '/home/overview'],
 ]);
 
 const routeHistory: string[] = [];

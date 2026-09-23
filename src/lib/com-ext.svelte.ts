@@ -12,15 +12,16 @@ import {
 /**
  * Capabilities that cause a real, user-visible side effect.
  *
- * Both of these start a download onto the user's disk, so the broker refuses to
- * forward them unless the caller has obtained explicit confirmation.  The
- * backend enforces the same rule, so this is defence in depth rather than the
- * only barrier.
+ * Both of these put a file on the user's disk, so the broker refuses to forward
+ * them unless the caller has obtained explicit confirmation.  The backend
+ * enforces the same rule, so this is defence in depth rather than the only
+ * barrier.
+ *
+ * Exported because the workflow engine needs the same list: if the two
+ * disagreed, a workflow could either prompt twice or skip the prompt entirely.
  */
-const SIDE_EFFECTING_CAPABILITIES: ReadonlySet<ComExtCapability> = new Set([
-  'files.open',
-  'transfers.download.enqueue',
-]);
+export const COM_EXT_SIDE_EFFECTING_CAPABILITIES: ReadonlySet<ComExtCapability> =
+  new Set(['files.open', 'transfers.download.enqueue']);
 
 /**
  * Community plugin state.
@@ -40,6 +41,28 @@ class ComExtStore {
 
   get enabledInstallations(): ComExtInstallation[] {
     return this.installed.filter((installation) => installation.enabled);
+  }
+
+  /**
+   * Human-readable plugin name for consent prompts, falling back to the id so a
+   * prompt is never shown with an empty name.
+   */
+  displayNameFor(pluginId: string): string {
+    const installation = this.installed.find((entry) => entry.manifest.id === pluginId);
+    return installation?.manifest.name ?? pluginId;
+  }
+
+  /** Plugins that attach to a given lifecycle hook point, in declared order. */
+  hookContributors(point: string): Array<{ pluginId: string; workflow: string }> {
+    const contributors: Array<{ pluginId: string; workflow: string }> = [];
+    for (const installation of this.enabledInstallations) {
+      for (const entry of installation.manifest.entrypoints.hooks) {
+        if (entry.point === point) {
+          contributors.push({ pluginId: installation.manifest.id, workflow: entry.workflow });
+        }
+      }
+    }
+    return contributors;
   }
 
   /** Plugins that contribute to a given UI slot point, in declared order. */
@@ -97,7 +120,7 @@ class ComExtStore {
   ): Promise<T> {
     let userConfirmed: boolean | undefined;
 
-    if (SIDE_EFFECTING_CAPABILITIES.has(capability)) {
+    if (COM_EXT_SIDE_EFFECTING_CAPABILITIES.has(capability)) {
       const summary =
         typeof args.filename === 'string'
           ? args.filename
