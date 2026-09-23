@@ -4,7 +4,7 @@
   "id": "org.cfms.remember",
   "name": "记住用户名密码",
   "description": "在登录界面记住用户名与密码：可保存多个账户、一键填回，并可选择是否一并保存密码。",
-  "publisher": "DC",
+  "publisher": "DoubleCircle",
   "version": "1.0.0",
   "com_ext_api": "1.0.0",
   "min_client_version": "1.0.0",
