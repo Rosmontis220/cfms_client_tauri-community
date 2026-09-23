@@ -25,8 +25,8 @@ use sha2::{Digest, Sha256};
 
 use super::manifest::{self, ComExtManifest};
 use super::{
-    COM_EXT_MANIFEST_FILENAME, MAX_EXPANDED_BYTES, MAX_FILES, MAX_FILE_BYTES, MAX_JSON_BYTES,
-    MAX_PACKAGE_BYTES,
+    COM_EXT_FILES_INDEX_PATH, COM_EXT_MANIFEST_FILENAME, MAX_EXPANDED_BYTES, MAX_FILES,
+    MAX_FILE_BYTES, MAX_JSON_BYTES, MAX_PACKAGE_BYTES,
 };
 
 /// A package that passed every structural check, held in memory.
@@ -59,9 +59,16 @@ impl ValidatedComExtPackage {
     }
 
     /// Every file that must be written to disk, with its digest.
+    ///
+    /// The index is excluded: it cannot describe itself, because writing it
+    /// changes it. A package may legitimately ship its own index — the packer
+    /// does — and the store replaces that one with this, so including it here
+    /// would record the size of the file that is about to be overwritten and
+    /// every later read would report it as tampered with.
     pub fn file_index(&self) -> Vec<FileIndexEntry> {
         self.files
             .iter()
+            .filter(|(path, _)| path.as_str() != COM_EXT_FILES_INDEX_PATH)
             .map(|(path, bytes)| FileIndexEntry {
                 path: path.clone(),
                 sha256: hex::encode(Sha256::digest(bytes)),
@@ -268,7 +275,13 @@ pub fn verify_installed_files(
     files: &BTreeMap<String, Vec<u8>>,
     index: &FileIndex,
 ) -> Result<(), String> {
-    if index.files.len() != files.len() {
+    // The index is not described by itself, so it is not counted on either
+    // side; everything else must be present exactly once.
+    let described = files
+        .keys()
+        .filter(|path| path.as_str() != COM_EXT_FILES_INDEX_PATH)
+        .count();
+    if index.files.len() != described {
         return Err("Installed plugin file index does not match its contents".into());
     }
     for entry in &index.files {
@@ -296,7 +309,7 @@ pub fn verify_installed_files(
 /// Allowlist of permitted archive entry paths.
 fn validate_package_path(path: &str) -> Result<(), String> {
     let allowed = path == COM_EXT_MANIFEST_FILENAME
-        || path == "META-INF/files.json"
+        || path == COM_EXT_FILES_INDEX_PATH
         || (path.starts_with("pages/") && (path.ends_with(".json") || path.ends_with(".html")))
         || (path.starts_with("workflows/") && path.ends_with(".json"))
         || (path.starts_with("slots/") && path.ends_with(".json"))
@@ -455,6 +468,79 @@ mod tests {
         let validated = validate_package(&valid_package()).expect("package should be valid");
         assert_eq!(validated.manifest.id, "org.example.test");
         assert_eq!(validated.files.len(), 2);
+    }
+
+    /// Replay what the store does to a package that ships its own index: write
+    /// every file, then overwrite the index with the one computed here.
+    ///
+    /// The written index must not describe itself, or every later read reports
+    /// the index as tampered with and the plugin can never be opened. Only the
+    /// round trip shows this; validating a package never touches the index.
+    #[test]
+    fn the_index_the_host_writes_does_not_describe_itself() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json("org.example.test", "").as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+            (
+                COM_EXT_FILES_INDEX_PATH,
+                br#"{"files":[{"path":"pages/home.json","sha256":"deadbeef","size":1}]}"#,
+            ),
+        ]);
+
+        let validated = validate_package(&package).expect("package should be valid");
+        assert!(
+            validated.files.contains_key(COM_EXT_FILES_INDEX_PATH),
+            "the fixture must ship an index, or it does not reproduce the round trip"
+        );
+
+        let index = FileIndex {
+            files: validated.file_index(),
+        };
+        let mut on_disk = validated.files.clone();
+        on_disk.insert(
+            COM_EXT_FILES_INDEX_PATH.into(),
+            serde_json::to_vec_pretty(&index).expect("the index should encode"),
+        );
+
+        verify_installed_files(&on_disk, &index).unwrap_or_else(|e| {
+            panic!("an installed package failed its own integrity check: {e}")
+        });
+    }
+
+    /// The same round trip, but for the packer's own artifact rather than a
+    /// fixture, so the two implementations stay in agreement about the index.
+    #[test]
+    fn the_packers_own_index_survives_the_round_trip() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("dist-plugins")
+            .join("tools.cfmscomext");
+
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!(
+                "skipped: {} is absent. Run `pnpm plugin:build tools` to produce it.",
+                path.display()
+            );
+            return;
+        };
+
+        let validated = validate_package(&bytes).expect("the packed plugin should validate");
+        let index = FileIndex {
+            files: validated.file_index(),
+        };
+        let mut on_disk = validated.files.clone();
+        on_disk.insert(
+            COM_EXT_FILES_INDEX_PATH.into(),
+            serde_json::to_vec_pretty(&index).expect("the index should encode"),
+        );
+
+        verify_installed_files(&on_disk, &index).unwrap_or_else(|e| {
+            panic!("an installed copy of the packed plugin failed its integrity check: {e}")
+        });
     }
 
     #[test]

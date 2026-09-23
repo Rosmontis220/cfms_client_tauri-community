@@ -47,6 +47,10 @@ Modified:
     Without it a plugin could only render declarative documents and could not
     compute anything. This widens what injected markup can do, and it is a
     deliberate trade for an interface intended for a private group.
+  * `vite.config.js` — the dev server no longer watches Rust build output. This
+    is a cargo workspace, so the compiler writes to `target/` at the repository
+    root rather than under `src-tauri/`; watching it made Vite race the compiler
+    for object files and abort `tauri dev` partway through its build.
   * `src-tauri/src/lib.rs`, `src/lib/feature-flags.ts`,
     `src/lib/settings-entries.ts`, `src/lib/navigation.ts`,
     `src/routes/home/+layout.svelte`, and the locale message catalogues —

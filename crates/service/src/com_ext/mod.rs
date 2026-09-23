@@ -74,6 +74,14 @@ pub const COM_EXT_MANIFEST_FILENAME: &str = "com_ext.json";
 /// The only `format` value a community manifest may declare.
 pub const COM_EXT_FORMAT: &str = "cfmscomext";
 
+/// Path of the on-disk integrity index inside an installed package.
+///
+/// The index never describes itself. Its own digest would have to change the
+/// moment it was written, so there is no value it could record and still be
+/// correct; both the packer and the host therefore leave this path out, and
+/// every comparison between an index and a file set must exclude it too.
+pub const COM_EXT_FILES_INDEX_PATH: &str = "META-INF/files.json";
+
 /// Capabilities a community package may request.
 ///
 /// This list is owned by this module and evolves independently of the official

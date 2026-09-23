@@ -22,7 +22,10 @@ use serde::{Deserialize, Serialize};
 
 use super::manifest::ComExtManifest;
 use super::package::{self, FileIndex};
-use super::{COM_EXT_MANIFEST_FILENAME, MAX_STORAGE_TOTAL_BYTES, MAX_STORAGE_VALUE_BYTES};
+use super::{
+    COM_EXT_FILES_INDEX_PATH, COM_EXT_MANIFEST_FILENAME, MAX_STORAGE_TOTAL_BYTES,
+    MAX_STORAGE_VALUE_BYTES,
+};
 
 /// Settings key holding the whole community plugin state blob.
 const STATE_KEY: &str = "com_ext.state";
@@ -243,7 +246,7 @@ impl ComExtStore {
         let index = FileIndex {
             files: validated.file_index(),
         };
-        let index_path = version_dir.join("META-INF").join("files.json");
+        let index_path = version_dir.join(COM_EXT_FILES_INDEX_PATH);
         if let Some(parent) = index_path.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create the plugin index directory: {e}"))?;
@@ -437,7 +440,7 @@ impl ComExtStore {
         }
 
         let version_dir = self.version_dir(plugin_id, &installation.manifest.version);
-        let index_path = version_dir.join("META-INF").join("files.json");
+        let index_path = version_dir.join(COM_EXT_FILES_INDEX_PATH);
         let index_bytes = fs::read(&index_path)
             .map_err(|e| format!("Plugin \"{plugin_id}\" is missing its file index: {e}"))?;
         let index: FileIndex = serde_json::from_slice(&index_bytes)
@@ -626,6 +629,59 @@ mod tests {
             writer.finish().unwrap();
         }
         buffer
+    }
+
+    /// A package shaped the way the packer writes one: it carries its own
+    /// `META-INF/files.json` describing the files beside it.
+    fn package_shipping_its_own_index(id: &str, html: &str) -> Vec<u8> {
+        let manifest = package_manifest(id, r#""files.list""#);
+        let index = serde_json::json!({
+            "files": [
+                { "path": "com_ext.json", "sha256": "00", "size": 0 },
+                { "path": "pages/home.html", "sha256": "00", "size": 0 },
+            ]
+        })
+        .to_string();
+
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(Cursor::new(&mut buffer));
+            let options = zip::write::SimpleFileOptions::default();
+            writer.start_file("com_ext.json", options).unwrap();
+            writer.write_all(manifest.as_bytes()).unwrap();
+            writer.start_file("pages/home.html", options).unwrap();
+            writer.write_all(html.as_bytes()).unwrap();
+            writer.start_file(COM_EXT_FILES_INDEX_PATH, options).unwrap();
+            writer.write_all(index.as_bytes()).unwrap();
+            writer.finish().unwrap();
+        }
+        buffer
+    }
+
+    /// The store replaces the index a package ships with one it writes itself.
+    /// If that written index also describes itself, the size it records belongs
+    /// to the file it just overwrote, and the plugin can never be opened again.
+    ///
+    /// Installing and then reading is the only way to observe this: validation
+    /// never looks at the index, and a fixture without one cannot reproduce it.
+    #[test]
+    fn installs_and_reads_a_package_that_ships_its_own_index() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package_shipping_its_own_index(
+                "org.example.indexed",
+                "<!doctype html><p>hi</p>",
+            ))
+            .unwrap();
+        store.set_enabled("org.example.indexed", true).unwrap();
+
+        let page = store
+            .read_page("org.example.indexed", "home")
+            .expect("a plugin that ships an index must still open after installation");
+        let ComExtPageSource::Html { html } = page else {
+            panic!("expected a self-contained application page");
+        };
+        assert!(html.contains("<p>hi</p>"), "got: {html}");
     }
 
     #[test]
