@@ -96,6 +96,7 @@
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { accessEntrySubject } from '$lib/access-entries';
+  import { runComExtHooks } from '$lib/com-ext-workflow';
   import type { AccessGrantFormValue } from '$lib/access-grants';
   import type { AccessRulesRecord } from '$lib/access-rules';
   import type { ContextMenuItem } from '$lib/components/context-menu';
@@ -1235,9 +1236,15 @@
   // --- Download ---
 
   async function handleDownload(doc: ServerDocumentEntry) {
+    const hookContext = { documentId: doc.id, filename: doc.title };
+    // Community plugin hooks observe this action; they do not gate it. They are
+    // fired without awaiting so a slow or broken plugin cannot delay or block
+    // the user's download, and the hook layer already isolates plugin failures.
+    void runComExtHooks('beforeDocumentOpen', hookContext);
     try {
       await getDocument(doc.id, doc.title);
       await rememberVisit(currentFilePreferenceScope(), documentToRecord(doc, currentFolderId));
+      void runComExtHooks('afterDownloadEnqueue', hookContext);
     } catch (e) {
       if (isAccessDeniedError(e)) {
         documentAccessDenied = { name: doc.title, id: doc.id, accessedAt: Date.now() };

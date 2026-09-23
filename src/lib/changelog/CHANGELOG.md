@@ -14,9 +14,14 @@ on upstream v0.51.1. It is not affiliated with, endorsed by, or supported by the
 CFMS Client project.
 
 ### Added
-- **Community plugins.** Distributed as `.cfmscomext` packages, a plugin can add
-  navigation entries, settings sections, pages, file-row and toolbar
-  contributions, background actions, and lifecycle hooks.
+- **Community plugins.** Distributed as `.cfmscomext` packages. An enabled plugin
+  can add navigation entries, contribute a panel to the overview, render its own
+  pages under `/home/com-ext/view`, and run declarative workflows that reach the
+  host through a capability broker.
+- **Lifecycle hooks.** A plugin can attach a workflow to `onLogin`, `onLogout`,
+  `beforeDocumentOpen`, and `afterDownloadEnqueue`. Hooks run as background work,
+  so they cannot prompt, navigate, or start a download, and one failing plugin
+  cannot block the action that triggered it.
 - **A plugin manager** under Settings, listing each installed plugin with its
   requested capabilities and disk usage, with per-plugin enable switches and
   uninstall.

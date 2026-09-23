@@ -31,6 +31,7 @@
   import { supportsKeyboardShortcuts } from '$lib/platform';
   import { extensionsStore } from '$lib/extensions.svelte';
   import { comExtStore } from '$lib/com-ext.svelte';
+  import { runComExtHooks } from '$lib/com-ext-workflow';
   import { COMMUNITY_EXT_ENABLED, USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
   import { isIconName } from '$lib/icons';
   import { shouldOfferConnectionReturn } from '$lib/public-utility-navigation';
@@ -200,6 +201,25 @@
   // enable, or uninstall, and this layout's navigation follows it reactively.
   onMount(() => {
     if (COMMUNITY_EXT_ENABLED) void comExtStore.refresh();
+  });
+
+  // Fire community plugin lifecycle hooks when the signed-in state flips.
+  //
+  // This watches the state rather than hooking the login and logout handlers,
+  // so every path that starts or ends a session is covered — sign-in, sign-out,
+  // token expiry, and lockdown all reach it. Hooks are background work, so they
+  // cannot prompt or navigate, and they run after the state change rather than
+  // gating it.
+  let previousSignedIn = false;
+  let sessionUsername: string | null = null;
+  $effect(() => {
+    if (!COMMUNITY_EXT_ENABLED) return;
+    const signedIn = authStore.isLoggedIn && !authStore.postLoginPending;
+    if (signedIn) sessionUsername = authStore.username;
+    if (signedIn === previousSignedIn) return;
+    previousSignedIn = signedIn;
+    void runComExtHooks(signedIn ? 'onLogin' : 'onLogout', { username: sessionUsername });
+    if (!signedIn) sessionUsername = null;
   });
 
   onMount(() => {

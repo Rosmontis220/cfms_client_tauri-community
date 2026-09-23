@@ -5,6 +5,7 @@
   import { getDirectoryInfo, getDocument, loadUserPreference } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import HomeRecordPanel from '$lib/components/HomeRecordPanel.svelte';
+  import ComExtSlot from '$lib/components/ComExtSlot.svelte';
   import {
     clearFavoriteRecords,
     clearRecentVisits,
@@ -192,6 +193,10 @@
       onClear={clearFavorites}
     />
   </div>
+
+  <!-- Community plugins may contribute panels to the overview. Renders nothing
+       when no plugin does. -->
+  <ComExtSlot point="overview-section" />
 </div>
 
 <style>
