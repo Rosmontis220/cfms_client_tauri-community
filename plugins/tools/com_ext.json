@@ -4,7 +4,7 @@
   "id": "org.cfms.tools",
   "name": "小工具",
   "description": "解谜相关的常用小工具：ASCII/进制/编码转换、经典密码、SHA-256 哈希与 7×7 矩阵生成。",
-  "publisher": "Rosmontis220",
+  "publisher": "R220",
   "version": "1.0.0",
   "com_ext_api": "1.0.0",
   "min_client_version": "1.0.0",

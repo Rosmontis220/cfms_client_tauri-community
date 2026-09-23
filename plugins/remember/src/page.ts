@@ -117,6 +117,12 @@ async function start(root: ShadowRoot, host: PluginHost, pluginId: string): Prom
   const panel = collect(root);
   if (!panel) return;
 
+  // The panel is inert until the saved state has been read, because reading it
+  // is what assigns `state`. A control the user could change before that would
+  // take their choice and then lose it to the load that follows.
+  panel.rememberMe.disabled = true;
+  panel.rememberPassword.disabled = true;
+
   // The two checkboxes are one decision about this account, so they are one
   // named group rather than two loose controls inside the host's form.
   panel.options.setAttribute('aria-label', t('title'));
@@ -269,6 +275,10 @@ async function start(root: ShadowRoot, host: PluginHost, pluginId: string): Prom
   }
 
   render();
+
+  // Only now can a choice be made: `state` holds what was stored, so anything
+  // the user does from here on is applied to it rather than replacing it.
+  panel.rememberMe.disabled = false;
 
   const held = early;
   early = null;

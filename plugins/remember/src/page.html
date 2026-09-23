@@ -208,12 +208,16 @@
       </div>
 
       <div class="remember-options" data-role="options" role="group">
+        <!-- Both controls start disabled and the script enables them once it
+             has read what they control. A control that can be changed before
+             its own state has loaded would accept the choice and then have it
+             overwritten by the load. -->
         <label class="remember-option">
-          <input type="checkbox" data-role="remember-me" />
+          <input type="checkbox" data-role="remember-me" disabled />
           <span data-role="remember-me-label"></span>
         </label>
         <label class="remember-option">
-          <input type="checkbox" data-role="remember-password" />
+          <input type="checkbox" data-role="remember-password" disabled />
           <span data-role="remember-password-label"></span>
         </label>
       </div>

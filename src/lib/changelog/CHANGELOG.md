@@ -62,6 +62,16 @@ CFMS Client project.
   device.
 
 ### Fixed
+- **记住用户名密码 now actually remembers.** The credentials were handed to the
+  plugin after the post-login loading state had already replaced the sign-in
+  form, which unmounted the plugin panel inside it — so the panel was gone and
+  its subscription disposed by the time the sign-in was announced, and nothing
+  was ever recorded. The hand-over now happens just before that state begins,
+  which is the last moment a plugin rendering on the form can still hear it.
+- A plugin that renders a checkbox into the sign-in form can no longer lose the
+  user's choice. The panel enabled its controls as soon as its markup appeared,
+  so a change made before its stored state had finished loading was overwritten
+  by that load. Its controls are now inert until it has read what they control.
 - Opening a page no longer starts halfway down it. The workspace scrolls inside
   its own element rather than the document, so the previous page's offset was
   carried over and then clamped to the new page's height — arriving at a short

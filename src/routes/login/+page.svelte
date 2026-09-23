@@ -53,7 +53,6 @@
   import { downloadStore } from "$lib/stores.svelte";
   import { appearanceStore } from "$lib/appearance.svelte";
   import Icon from "$lib/components/Icon.svelte";
-  import ComExtLaunchMenu from "$lib/components/ComExtLaunchMenu.svelte";
   import ComExtSlot from "$lib/components/ComExtSlot.svelte";
   import { comExtStore } from "$lib/com-ext.svelte";
   import { dispatchComExtEvent } from "$lib/com-ext-events";
@@ -399,10 +398,10 @@
     authStore.apply(authStatus);
     serverStateStore.apply(serverState);
 
-    // The credentials the server just accepted still exist only here and now.
-    // A plugin that asked to hear about a successful sign-in is told before
-    // they are dropped, because storing what it is never given is impossible.
-    notifyCommunityPluginsOfLogin(username.trim(), password || pendingPassword);
+    // The credentials were handed to the plugins by the caller, before the
+    // loading state unmounted the form they were typed into. It cannot be done
+    // here instead: by this point nothing that renders on that form is still
+    // mounted to hear it.
 
     // Clear password from JS memory.
     password = "";
@@ -638,6 +637,14 @@
       postLoginStarted = true;
       if (await deferPostLoginIfLocked(authResult)) return;
 
+      // Hand the credentials to the plugins entitled to them, here and not
+      // later. The loading state that starts on the next line is the `{:else}`
+      // of the element the form sits in, so it unmounts the form and every
+      // plugin contribution inside it — and an unmounted page is not listening.
+      // A plugin that remembers a sign-in can only hear of one while the screen
+      // it renders on is still there to hear it.
+      notifyCommunityPluginsOfLogin(username.trim(), password);
+
       // Animate the loading phases only after lockdown gating succeeds.
       loadingPhase = loadingPhases[0];
       await info("Login successful, running post-login loading phases...");
@@ -720,8 +727,8 @@
       return false;
     }
 
-    // 2FA is accepted. Close the modal before lockdown gating/loading begins
-    // so it does not cover the next full-screen state.
+    // Close the modal before lockdown gating/loading begins so it does not cover
+    // the next full-screen state.
     show2faDialog = false;
 
     try {
@@ -729,6 +736,12 @@
       authStore.beginPostLogin();
       busy = true;
       if (await deferPostLoginIfLocked(authResult)) return true;
+
+      // The second factor was accepted, so these credentials are good. The same
+      // hand-over as the first-factor path, in the same place and for the same
+      // reason: the loading state below unmounts the form the contributions are
+      // in, and an unmounted page is not listening.
+      notifyCommunityPluginsOfLogin(username.trim(), pendingPassword);
 
       // Animate the loading phases only after lockdown gating succeeds.
       loadingPhase = loadingPhases[0];
@@ -788,7 +801,6 @@
     >
       <Icon name="keyboard" size="18px" />
     </button>
-    <ComExtLaunchMenu />
   </div>
   <section class="auth-panel">
   <div

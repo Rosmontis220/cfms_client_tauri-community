@@ -231,6 +231,24 @@ addressed only to plugins holding `login.form.read`, because holding that is wha
 entitles you to them. There is no `login.failed`: nothing is gained by being told
 about a password the server rejected.
 
+Two properties of that delivery are load-bearing, and both have bitten this
+interface once:
+
+- **Subscribe before your first `await`.** The host does not replay an event to a
+  page that was not listening when it was sent, so a page that subscribes after
+  reading its own storage can miss the one sign-in it exists for.
+- **You are only told while the sign-in screen is mounted.** A successful sign-in
+  replaces the form — and everything contributed into it — with a loading state,
+  and the host hands the credentials over just before that happens. A page that
+  has already been unmounted is not listening, so the hand-over is a genuine
+  event with a deadline rather than a notification you can collect later.
+
+**Keep your own controls inert until you have read what they control.** The host
+loads your page before the user can see it, but "before" is milliseconds, not
+never: a checkbox that accepts a change before your stored state arrives will
+take the user's choice and then lose it to that load. Disable the control in your
+markup and enable it once you are ready.
+
 **What you store is stored as written.** `storage.write` keeps your value in the
 app's local settings with no encryption of its own — the backend has no key store
 to hold a key anywhere but beside the data, which would be a lock with its key

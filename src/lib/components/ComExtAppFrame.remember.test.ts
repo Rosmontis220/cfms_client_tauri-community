@@ -89,9 +89,21 @@ function mountPluginPage(html: string, pluginId: string, form: StubForm): { shad
   return { shadow, host };
 }
 
-/** Let the page's mount sequence finish; it awaits the bridge several times. */
-async function settle() {
-  for (let turn = 0; turn < 5; turn += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+/**
+ * Let the page's mount sequence finish; it awaits the bridge several times.
+ *
+ * When a shadow root is given, this waits for the control the plugin enables
+ * once it has read its own state, which is the point at which a choice can be
+ * made without being overwritten by that read. Without one it simply gives the
+ * promises a few turns, which is what a test expecting a failure needs.
+ */
+async function settle(shadow?: ShadowRoot) {
+  const turns = shadow ? 40 : 5;
+  for (let turn = 0; turn < turns; turn += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const box = shadow?.querySelector<HTMLInputElement>('[data-role="remember-me"]');
+    if (box && !box.disabled) return;
+  }
 }
 
 // The artifact is not committed, so `vitest.global-setup.ts` builds it before
@@ -113,7 +125,7 @@ describe('built 记住用户名密码 plugin page', () => {
   it('offers the two checkboxes and no account list when nothing is stored', async () => {
     const form = freshForm();
     const { shadow } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     expect(shadow.querySelector<HTMLInputElement>('[data-role="remember-me"]')).not.toBeNull();
     expect(shadow.querySelector<HTMLInputElement>('[data-role="remember-password"]')).not.toBeNull();
@@ -135,7 +147,7 @@ describe('built 记住用户名密码 plugin page', () => {
     const form = freshForm();
 
     const { shadow } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     expect(form.username).toBe('ada');
     expect(form.password).toBe('hunter2');
@@ -154,8 +166,8 @@ describe('built 记住用户名密码 plugin page', () => {
     );
     const form = freshForm();
 
-    mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    const { shadow } = mountPluginPage(html, 'org.cfms.remember', form);
+    await settle(shadow);
 
     expect(form.username).toBe('ada');
     expect(form.password).toBe('');
@@ -164,14 +176,14 @@ describe('built 记住用户名密码 plugin page', () => {
   it('saves what was typed once the sign-in succeeds', async () => {
     const form = freshForm({ username: 'ada', password: 'hunter2' });
     const { shadow, host } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     click(shadow, 'remember-me');
     click(shadow, 'remember-password');
-    await settle();
+    await settle(shadow);
 
     host.reportLogin({ username: 'ada', password: 'hunter2' });
-    await settle();
+    await settle(shadow);
 
     const stored = JSON.parse(storage.get(key) ?? '{}');
     expect(stored.accounts).toHaveLength(1);
@@ -185,12 +197,12 @@ describe('built 记住用户名密码 plugin page', () => {
   it('keeps the name but not the password when only 记住我 is ticked', async () => {
     const form = freshForm({ username: 'ada', password: 'hunter2' });
     const { shadow, host } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     click(shadow, 'remember-me');
-    await settle();
+    await settle(shadow);
     host.reportLogin({ username: 'ada', password: 'hunter2' });
-    await settle();
+    await settle(shadow);
 
     const stored = JSON.parse(storage.get(key) ?? '{}');
     expect(stored.accounts[0]).toMatchObject({ username: 'ada', password: '' });
@@ -209,13 +221,13 @@ describe('built 记住用户名密码 plugin page', () => {
     );
     const form = freshForm();
     const { shadow, host } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     // Untick, then sign in as that same account.
     click(shadow, 'remember-me');
-    await settle();
+    await settle(shadow);
     host.reportLogin({ username: 'ada', password: 'hunter2' });
-    await settle();
+    await settle(shadow);
 
     const stored = JSON.parse(storage.get(key) ?? '{}');
     expect(stored.accounts).toEqual([]);
@@ -226,12 +238,12 @@ describe('built 记住用户名密码 plugin page', () => {
   it('refuses to keep a password without a name to attach it to', async () => {
     const form = freshForm();
     const { shadow } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     // 记住密码 is meaningless on its own, so it stays disabled until 记住我 is on.
     expect(shadow.querySelector<HTMLInputElement>('[data-role="remember-password"]')?.disabled).toBe(true);
     click(shadow, 'remember-me');
-    await settle();
+    await settle(shadow);
     expect(shadow.querySelector<HTMLInputElement>('[data-role="remember-password"]')?.disabled).toBe(false);
   });
 
@@ -249,19 +261,19 @@ describe('built 记住用户名密码 plugin page', () => {
     );
     const form = freshForm();
     const { shadow } = mountPluginPage(html, 'org.cfms.remember', form);
-    await settle();
+    await settle(shadow);
 
     // Most recently used first, and the newest one is already in the form.
     expect(chipUsernames(shadow)).toEqual(['ada', 'bob']);
     expect(form.username).toBe('ada');
 
     chip(shadow, 'bob').querySelector<HTMLButtonElement>('[data-action="use"]')?.click();
-    await settle();
+    await settle(shadow);
     expect(form.username).toBe('bob');
     expect(form.password).toBe('swordfish');
 
     chip(shadow, 'bob').querySelector<HTMLButtonElement>('[data-action="remove"]')?.click();
-    await settle();
+    await settle(shadow);
 
     expect(chipUsernames(shadow)).toEqual(['ada']);
     const stored = JSON.parse(storage.get(key) ?? '{}');
@@ -273,17 +285,17 @@ describe('built 记住用户名密码 plugin page', () => {
 
     // One server turns remembering on but nobody signs in there.
     const first = mountPluginPage(html, 'org.cfms.remember', freshForm());
-    await settle();
+    await settle(first.shadow);
     click(first.shadow, 'remember-me');
-    await settle();
+    await settle(first.shadow);
 
     // A different server signs in.
     const second = mountPluginPage(html, 'org.cfms.remember', freshForm({ server: otherServer }));
-    await settle();
+    await settle(second.shadow);
     click(second.shadow, 'remember-me');
-    await settle();
+    await settle(second.shadow);
     second.host.reportLogin({ username: 'zoe', password: 'pw' });
-    await settle();
+    await settle(second.shadow);
 
     expect(accountsAt(storageKeyForServer(otherServer))).toEqual(['zoe']);
     // The first server kept its preference and nothing else: the sign-in that
@@ -315,7 +327,7 @@ describe('built 记住用户名密码 plugin page', () => {
     for (const code of scripts) {
       new Function('root', 'pluginId', 'host', code)(shadow, 'org.cfms.remember', refusing);
     }
-    await settle();
+    await settle(shadow);
 
     const status = shadow.querySelector<HTMLElement>('[data-role="status"]');
     expect(status?.hidden).toBe(false);
