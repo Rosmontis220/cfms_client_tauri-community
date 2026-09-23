@@ -36,6 +36,7 @@
     serverStateStore,
   } from "$lib/stores.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import ComExtLaunchMenu from "$lib/components/ComExtLaunchMenu.svelte";
   import MdOutlinedField from "$lib/components/MdOutlinedField.svelte";
   import MdSwitch from "$lib/components/MdSwitch.svelte";
   import ProgressRing from "$lib/components/ProgressRing.svelte";
@@ -289,6 +290,7 @@
           ></span>
         {/if}
       </button>
+      <ComExtLaunchMenu />
     </div>
   </header>
 

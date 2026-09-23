@@ -71,12 +71,13 @@ root, so it cannot restyle the app and the app cannot restyle it. That
 isolation cuts both ways — **the app's CSS is not visible to your page**, so
 bring your own styles.
 
-Your scripts run once the markup exists, called with two arguments:
+Your scripts run once the markup exists, called with three arguments:
 
 | Argument  | What it is |
 | --------- | ---------- |
 | `root`      | the page's own `ShadowRoot`; query your markup through it |
 | `pluginId`  | your plugin's id from the manifest |
+| `host`      | the bridge to the host; see below |
 
 ```html
 <p id="out"></p>
@@ -89,6 +90,45 @@ Your scripts run once the markup exists, called with two arguments:
 Because scripts are evaluated rather than injected as `<script>` tags, you can
 write anything a web page can: compute, keep state, listen for events. A page
 that needs a library can bundle it in.
+
+### Talking back to the host
+
+`host` is the sanctioned way to reach the host, and it is small:
+
+| Member | What it does |
+| ------ | ------------ |
+| `host.pluginId` | your id, bound when the bridge was built |
+| `host.call(capability, args?)` | asks the host for a capability you declared, and resolves with its result |
+| `host.on(event, handler)` | subscribes to an event addressed to your plugin; returns the unsubscribe function |
+
+```html
+<button id="stamp">记一笔</button>
+<script>
+  root.querySelector('#stamp').addEventListener('click', async () => {
+    const value = String(Date.now());
+    await host.call('storage.write', { key: 'lastSeen', value });
+  });
+</script>
+```
+
+`call` checks your grant before it does anything, so a capability you did not
+declare — or one the user declined when enabling you — rejects instead of
+silently doing nothing. A capability that touches the user's disk
+(`files.open`, `transfers.download.enqueue`) asks for confirmation first, and
+rejects when the user declines.
+
+`on` exists because a host command is request/response: without it the host
+could never tell your page that anything happened. It delivers only events
+addressed to your plugin id, and only while your page is mounted — the host
+drops every subscription your page made when it unmounts it, so a page that is
+gone stops acting on the user's behalf.
+
+Delivery is to whoever is already subscribed, so **an event that fires while
+your page is still starting up is not replayed.** Subscribe as early as your
+page can, and treat an event as a notification rather than as the only record of
+what happened.
+
+The `host` argument is new, and a page that ignores it keeps working unchanged.
 
 ### A page can also be declarative
 
@@ -128,7 +168,7 @@ is treated as a mistake.
 | `navigation` | adds an entry to the app's navigation. Fields: `id`, `label`, `page`, optional `icon`, optional `order` (lower sorts first) |
 | `pages` | declares a page that other entrypoints can point at |
 | `settings` | adds an entry under Settings |
-| `slots` | renders a page into a region of a host screen. Supported points: `overview-section`, `settings-section` |
+| `slots` | renders a page into a region of a host screen. Supported points: `overview-section`, `settings-section`, `login-section` |
 | `actions` | adds a command. Supported points: `file-toolbar`, `file-context-menu` |
 | `hooks` | runs a workflow on a lifecycle event: `beforeDocumentOpen`, `afterDownloadEnqueue`, `onLogin`, `onLogout` |
 
@@ -137,6 +177,17 @@ is treated as a mistake.
 workflows, not code; see
 [`src/lib/declarative-workflow.ts`](../src/lib/declarative-workflow.ts) for the
 node and expression vocabulary.
+
+A `navigation` entry is **device-level, not account-level**. Once someone is
+signed in it appears in the workspace sidebar; on the signed-out screens it
+appears in the top-right toolbar beside Settings. A plugin page is therefore
+reachable with no account and no server connection at all — which is what makes
+a compute-only plugin useful before anyone signs in, and is why the page route
+is not behind the sign-in gate.
+
+The consequence is yours to handle: if your page does want host data, it will be
+opened while nobody is signed in, and the host does not hide it for you. Either
+work without an account or say so on the page.
 
 ### Capabilities
 
@@ -157,9 +208,38 @@ every call, so a frontend check is never the only gate.
 | `ui.notify` | show a notification |
 | `ui.confirm` | ask the user to confirm |
 | `storage.read` / `storage.write` | a private key-value store, per plugin |
+| `login.form.read` | read what the sign-in form holds: username, password, server |
+| `login.form.fill` | put a username and password into the sign-in form |
 
 A plugin that computes on its own — a converter, a cipher tool — needs **none**
 of these, and an empty list keeps it incapable of touching the host at all.
+
+### The sign-in screen
+
+Two things are worth knowing before you attach to `login-section`.
+
+**`login.form.*` is served by the app, not the backend.** The sign-in form is
+component state in the running UI, so no command can read it; the app answers
+those two itself, for exactly as long as the sign-in screen is mounted. Your
+grant is still checked before either one runs, and the result is the same either
+way — you never have to know which half of the host answers a capability.
+
+**The host tells you when a sign-in succeeds.**
+`host.on('login.succeeded', …)` delivers `{ username, password }` immediately
+before the app drops its own copies, which is the last moment they exist. It is
+addressed only to plugins holding `login.form.read`, because holding that is what
+entitles you to them. There is no `login.failed`: nothing is gained by being told
+about a password the server rejected.
+
+**What you store is stored as written.** `storage.write` keeps your value in the
+app's local settings with no encryption of its own — the backend has no key store
+to hold a key anywhere but beside the data, which would be a lock with its key
+taped to it. If your plugin remembers a password, say so in its `description` and
+let the user decide.
+
+A worked example is [`plugins/remember`](../plugins/remember) — saved accounts,
+a chip per account, and two checkboxes — which is what this slot point was added
+for.
 
 ## Packaging rules
 

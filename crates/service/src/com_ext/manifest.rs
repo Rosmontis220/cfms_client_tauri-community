@@ -21,9 +21,16 @@ use super::{
 ///
 /// Sidebar entries and standalone pages are deliberately absent: they carry a
 /// label and an order the host needs, so they have their own entrypoint lists.
+///
+/// `login-section` is the sign-in screen's form card. It is the only point that
+/// sits inside a form the user is about to submit, so it is the one a plugin
+/// needs for anything that pre-fills or remembers what was typed — see the
+/// `login.form.*` capabilities, which are the sanctioned way to read and write
+/// those fields.
 pub const COM_EXT_SLOT_POINTS: &[&str] = &[
     "overview-section",
     "settings-section",
+    "login-section",
 ];
 
 /// Host surfaces a package may add a command to.

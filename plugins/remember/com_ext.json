@@ -1,0 +1,22 @@
+{
+  "format": "cfmscomext",
+  "schema_version": 1,
+  "id": "org.cfms.remember",
+  "name": "记住用户名密码",
+  "description": "在登录界面记住用户名与密码：可保存多个账户、一键填回，并可选择是否一并保存密码。",
+  "publisher": "Rosmontis220",
+  "version": "1.0.0",
+  "com_ext_api": "1.0.0",
+  "min_client_version": "1.0.0",
+  "requested_capabilities": [
+    "login.form.read",
+    "login.form.fill",
+    "storage.read",
+    "storage.write"
+  ],
+  "entrypoints": {
+    "pages": [{ "id": "panel", "label": "记住用户名密码", "page": "panel" }],
+    "slots": [{ "id": "login", "point": "login-section", "page": "panel", "order": 10 }]
+  },
+  "background_triggers": []
+}

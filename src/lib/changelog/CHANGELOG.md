@@ -45,12 +45,32 @@ CFMS Client project.
   example: fourteen cipher and encoding tools plus the server-key matrix panel,
   carried over from the reference implementation and checked against its
   recorded outputs.
+- **A bridge for plugin pages that bring their own code.** A page is now called
+  with a third argument, `host`: `host.call(...)` asks the host for a capability
+  the plugin declared, and `host.on(...)` receives the events the host addresses
+  to it. Until now a code page had no sanctioned way to reach the host at all —
+  only declarative workflows could, so a page with real logic could compute but
+  not remember anything.
+- **Plugins can render on the sign-in screen.** A new `login-section` slot point
+  sits inside the sign-in form, and the `login.form.read` and `login.form.fill`
+  capabilities read and fill its fields. The host tells a plugin holding the
+  former when a sign-in succeeds, immediately before it drops its own copies of
+  the credentials — the only moment a "remember password" feature can act.
+- **记住用户名密码, the second community plugin**, ships here: saved accounts
+  listed as chips, one click to fill the form back in, separate "remember me"
+  and "remember password" choices, and accounts kept per server rather than per
+  device.
 
 ### Fixed
 - Opening a page no longer starts halfway down it. The workspace scrolls inside
   its own element rather than the document, so the previous page's offset was
   carried over and then clamped to the new page's height — arriving at a short
   page from a long list looked like it had opened at the bottom.
+- Community plugin pages now open before sign-in. The entry was missing from the
+  signed-out top-right toolbar and the route was behind the sign-in gate, so a
+  plugin page was unreachable at exactly the moment a compute-only tool is most
+  useful. Both the toolbar and the route gate now read the same list of
+  account-free screens, so they cannot disagree again.
 
 ### Improved
 - The in-app updater now reads this edition's own releases. Left pointing at the

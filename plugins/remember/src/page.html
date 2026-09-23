@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      /*
+       * The host mounts this document into an open shadow root, so the app's
+       * CSS custom properties are out of reach. Every token below is defined
+       * here, on the plugin's own root element, and nothing outside the shadow
+       * root is referenced.
+       *
+       * The panel sits inside the host's sign-in card, so it draws no card of
+       * its own: it is a row of chips and a row of checkboxes, nothing more.
+       */
+      .com-ext-remember {
+        /* Material Design 3 — light scheme */
+        --remember-text: #1d1b20;
+        --remember-muted: #49454f;
+        --remember-primary: #4a5b92;
+        --remember-on-primary: #ffffff;
+        --remember-chip: #ece6f0;
+        --remember-chip-hover: #e0d9e8;
+        --remember-outline: #cac4d0;
+        --remember-error: #8c1d18;
+        --remember-radius: 999px;
+        --remember-motion: 140ms cubic-bezier(0.2, 0, 0, 1);
+
+        display: grid;
+        gap: 10px;
+        color: var(--remember-text);
+        font-family: 'Segoe UI', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui,
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.4;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .com-ext-remember *,
+      .com-ext-remember *::before,
+      .com-ext-remember *::after {
+        box-sizing: border-box;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .com-ext-remember {
+          --remember-text: #e6e0e9;
+          --remember-muted: #cac4d0;
+          --remember-primary: #b8c4ff;
+          --remember-on-primary: #1b2b60;
+          --remember-chip: #49454f;
+          --remember-chip-hover: #5a5563;
+          --remember-outline: #5a5563;
+          --remember-error: #ffb4ab;
+        }
+      }
+
+      .remember-accounts {
+        display: grid;
+        gap: 6px;
+      }
+
+      .remember-accounts[hidden] {
+        display: none;
+      }
+
+      .remember-accounts__label {
+        margin: 0;
+        color: var(--remember-muted);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .remember-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .remember-chip {
+        display: inline-flex;
+        align-items: stretch;
+        overflow: hidden;
+        border: 1px solid var(--remember-outline);
+        border-radius: var(--remember-radius);
+        background: var(--remember-chip);
+        transition: background var(--remember-motion);
+      }
+
+      .remember-chip:hover {
+        background: var(--remember-chip-hover);
+      }
+
+      .remember-chip__use,
+      .remember-chip__remove {
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .remember-chip__use {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        max-width: 180px;
+        padding: 5px 4px 5px 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .remember-chip__lock {
+        flex: none;
+        width: 11px;
+        height: 11px;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.55;
+        /* A padlock is drawn with two pseudo-elements so the page needs no
+           icon font: the font the host loads is not available to assume. */
+        position: relative;
+      }
+
+      .remember-chip__lock::before {
+        content: '';
+        position: absolute;
+        left: 2px;
+        top: -4px;
+        width: 7px;
+        height: 6px;
+        border: 1.5px solid currentColor;
+        border-bottom: 0;
+        border-radius: 4px 4px 0 0;
+        background: var(--remember-chip);
+      }
+
+      .remember-chip__remove {
+        padding: 0 9px 0 5px;
+        font-size: 15px;
+        line-height: 1;
+        opacity: 0.6;
+        transition: opacity var(--remember-motion);
+      }
+
+      .remember-chip__remove:hover {
+        opacity: 1;
+        color: var(--remember-error);
+      }
+
+      .remember-chip__use:focus-visible,
+      .remember-chip__remove:focus-visible,
+      .remember-option input:focus-visible {
+        outline: 2px solid var(--remember-primary);
+        outline-offset: 1px;
+      }
+
+      .remember-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 18px;
+      }
+
+      .remember-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .remember-option input {
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        accent-color: var(--remember-primary);
+        cursor: pointer;
+      }
+
+      .remember-option input:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+
+      .remember-option:has(input:disabled) {
+        cursor: default;
+        opacity: 0.6;
+      }
+
+      .remember-status {
+        margin: 0;
+        color: var(--remember-error);
+        font-size: 12px;
+      }
+
+      .remember-status[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="com-ext-remember" data-role="remember">
+      <div class="remember-accounts" data-role="accounts" hidden>
+        <p class="remember-accounts__label" data-role="accounts-label"></p>
+        <div class="remember-chips" data-role="chips"></div>
+      </div>
+
+      <div class="remember-options" data-role="options" role="group">
+        <label class="remember-option">
+          <input type="checkbox" data-role="remember-me" />
+          <span data-role="remember-me-label"></span>
+        </label>
+        <label class="remember-option">
+          <input type="checkbox" data-role="remember-password" />
+          <span data-role="remember-password-label"></span>
+        </label>
+      </div>
+
+      <p class="remember-status" data-role="status" role="alert" hidden></p>
+    </div>
+
+    <!--BUNDLE-->
+  </body>
+</html>

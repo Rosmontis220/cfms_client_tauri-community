@@ -30,7 +30,9 @@ export type ComExtCapability =
   | 'ui.notify'
   | 'ui.confirm'
   | 'storage.read'
-  | 'storage.write';
+  | 'storage.write'
+  | 'login.form.read'
+  | 'login.form.fill';
 
 /**
  * Regions a plugin may render one of its page documents into.
@@ -39,7 +41,7 @@ export type ComExtCapability =
  * screens, so these points name *where the document appears*. Points that name
  * a command rather than a region belong to `ComExtActionPoint` instead.
  */
-export type ComExtSlotPoint = 'overview-section' | 'settings-section';
+export type ComExtSlotPoint = 'overview-section' | 'settings-section' | 'login-section';
 
 /**
  * Host surfaces a plugin may add a command to.

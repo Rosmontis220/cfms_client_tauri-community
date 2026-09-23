@@ -12,8 +12,16 @@
    * manifests declare, and a plugin that is disabled contributes nothing —
    * both of which `slotContributors` decides, so this component stays a thin
    * view over the registry.
+   *
+   * `variant` decides whether each contribution gets a card of its own. A
+   * contribution on a plain screen wants one; one inside a card the host
+   * already drew — the sign-in form — would only be a card inside a card.
    */
-  let { point, heading }: { point: ComExtSlotPoint; heading?: string } = $props();
+  let {
+    point,
+    heading,
+    variant = 'card',
+  }: { point: ComExtSlotPoint; heading?: string; variant?: 'card' | 'plain' } = $props();
 
   const contributions = $derived(
     COMMUNITY_EXT_ENABLED ? comExtStore.slotContributors(point) : [],
@@ -26,6 +34,7 @@
     {#each contributions as contribution (`${contribution.pluginId}:${contribution.entry.id}`)}
       <section
         class="com-ext-slot-contribution"
+        class:com-ext-slot-contribution--plain={variant === 'plain'}
         data-com-ext-plugin={contribution.pluginId}
         aria-label={comExtStore.displayNameFor(contribution.pluginId)}
       >
@@ -46,5 +55,11 @@
     border-radius: var(--explorer-radius-medium);
     background: var(--explorer-surface-raised);
     overflow: hidden;
+  }
+
+  .com-ext-slot-contribution--plain {
+    border: 0;
+    border-radius: 0;
+    background: none;
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { createComExtPageHost, type ComExtPageHost } from '$lib/com-ext-page-host';
 
   /**
    * Mounts a plugin page that ships its own markup and code.
@@ -7,9 +8,10 @@
    * A page is one self-contained HTML file. Its styles and markup are mounted
    * into a shadow root, so a plugin cannot restyle the app and the app cannot
    * restyle a plugin, and its scripts run once the markup is in place. Each
-   * script is called with the shadow root as `root` and the plugin id as
-   * `pluginId`, so a page can reach its own markup without guessing at ids in
-   * the app's document.
+   * script is called with the shadow root as `root`, the plugin id as
+   * `pluginId`, and the host bridge as `host`, so a page can reach its own
+   * markup without guessing at ids in the app's document and can ask the host
+   * for the capabilities it declared.
    */
   let { html, pluginId }: { html: string; pluginId: string } = $props();
 
@@ -21,17 +23,24 @@
     if (!element) return;
 
     const shadow = element.attachShadow({ mode: 'open' });
+    const host = createComExtPageHost(pluginId);
     try {
       error = null;
-      mountPage(shadow, html, pluginId);
+      mountPage(shadow, html, pluginId, host);
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     }
 
-    return () => shadow.replaceChildren();
+    return () => {
+      // A page that is gone must stop hearing from the host. Without this a
+      // subscription outlives its panel, and visiting the screen again leaves
+      // another live listener behind.
+      host.dispose();
+      shadow.replaceChildren();
+    };
   });
 
-  function mountPage(shadow: ShadowRoot, source: string, id: string) {
+  function mountPage(shadow: ShadowRoot, source: string, id: string, host: ComExtPageHost) {
     const parsed = new DOMParser().parseFromString(source, 'text/html');
 
     // Scripts are lifted out before the markup is mounted: an inline <script>
@@ -50,8 +59,10 @@
 
     for (const code of scripts) {
       // The page is trusted: the user installed it, and a plugin that cannot
-      // run code cannot compute anything. `root` scopes it to its own markup.
-      new Function('root', 'pluginId', code)(shadow, id);
+      // run code cannot compute anything. `root` scopes it to its own markup,
+      // and `host` is bound to this page's id, so a page cannot act as another
+      // plugin by naming one.
+      new Function('root', 'pluginId', 'host', code)(shadow, id, host);
     }
   }
 </script>

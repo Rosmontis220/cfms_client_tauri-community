@@ -1606,7 +1606,10 @@ export const zh_CN = {
         ui_confirm: '请求用户确认',
         storage_read: '读取插件私有存储',
         storage_write: '写入插件私有存储',
+        login_form_read: '读取登录表单中的用户名与密码',
+        login_form_fill: '填写登录表单中的用户名与密码',
       },
+      sideEffectConfirm: '{name} 请求执行以下操作：\n\n{action}\n\n对象：{target}\n\n允许吗？',
     },
     updates: {
       title: '更新',

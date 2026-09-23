@@ -1617,7 +1617,10 @@ export const en = {
         ui_confirm: 'Request user confirmation',
         storage_read: 'Read plugin private storage',
         storage_write: 'Write plugin private storage',
+        login_form_read: 'Read the username and password in the sign-in form',
+        login_form_fill: 'Fill in the username and password in the sign-in form',
       },
+      sideEffectConfirm: '{name} requests:\n\n{action}\n\nTarget: {target}\n\nAllow this?',
     },
     updates: {
       title: 'Updates',

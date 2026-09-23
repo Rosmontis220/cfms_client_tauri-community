@@ -341,6 +341,14 @@ pub async fn execute_com_ext_host_call(
             "request": arguments,
         })),
         "ui.notify" => Ok(serde_json::json!({ "notification": arguments })),
+        // The sign-in form lives in the running UI, so the frontend bridge
+        // answers these before a call ever reaches IPC. Reaching this arm means
+        // a plugin called the command directly, and naming the owner is more
+        // useful than the generic refusal below.
+        "login.form.read" | "login.form.fill" => Err(format!(
+            "Capability \"{capability}\" is served by the app frontend, not the backend; \
+             call it through the plugin page bridge"
+        )),
         "events.subscribe" => Ok(serde_json::json!({
             "supportedEvents": ["connection.changed", "tasks.changed"],
         })),

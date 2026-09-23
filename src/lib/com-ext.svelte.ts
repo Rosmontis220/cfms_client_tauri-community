@@ -55,6 +55,33 @@ class ComExtStore {
     return installation?.manifest.name ?? pluginId;
   }
 
+  /**
+   * Whether an enabled plugin holds a granted capability.
+   *
+   * The backend re-checks this for every call it answers, so this is not the
+   * only barrier. It is the *first* one for the capabilities the backend never
+   * sees: the running app answers those itself, and without this check a page
+   * could reach one the user was never asked about.
+   */
+  grants(pluginId: string, capability: ComExtCapability): boolean {
+    const installation = this.installed.find((entry) => entry.manifest.id === pluginId);
+    return Boolean(
+      installation?.enabled && installation.granted_capabilities.includes(capability),
+    );
+  }
+
+  /**
+   * Ids of the enabled plugins that hold a granted capability.
+   *
+   * Used to address an event at the plugins entitled to receive it, so the
+   * decision is made from the grant list rather than by whoever is listening.
+   */
+  pluginsGranting(capability: ComExtCapability): string[] {
+    return this.enabledInstallations
+      .filter((installation) => installation.granted_capabilities.includes(capability))
+      .map((installation) => installation.manifest.id);
+  }
+
   /** Plugins that contribute an action to a given action point. */
   actionContributors(point: ComExtActionPoint): Array<{
     pluginId: string;

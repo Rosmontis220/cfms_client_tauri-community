@@ -22,6 +22,11 @@
   import { initEventListeners } from "$lib/events";
   import { initI18n } from "$lib/i18n";
   import { initNavigationHistory, navigateUp, parentRouteFor } from "$lib/navigation";
+  // The workspace routes reachable without an account live in one list, shared
+  // with the top-right toolbar that links to them. Keeping a second copy here
+  // let the two drift, which is how a plugin page ended up reachable in the
+  // toolbar but not through the gate that guards it.
+  import { isPublicUtilityRoute } from "$lib/public-utility-navigation";
   import { appUpdateState } from "$lib/app-update-state.svelte";
   import { releaseHighlightsState } from "$lib/release-highlights/state.svelte";
   import { appearanceStore } from "$lib/appearance.svelte";
@@ -45,7 +50,8 @@
   } from "$lib/stores.svelte";
   import { appLockStore } from "$lib/app-lock.svelte";
   import { extensionsStore } from "$lib/extensions.svelte";
-  import { USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
+  import { comExtStore } from "$lib/com-ext.svelte";
+  import { COMMUNITY_EXT_ENABLED, USER_EXTENSIONS_ENABLED } from "$lib/feature-flags";
   import { clearAuthSession, getLocalDataResetStatus, getServiceStatus, getAuthStatus, getServerState } from "$lib/api";
   import AppLockOverlay from "$lib/components/AppLockOverlay.svelte";
   import LockdownBanner from "$lib/components/LockdownBanner.svelte";
@@ -84,14 +90,8 @@
   const CONNECTION_ROUTES = ["/login"];
   // Lockdown override route.
   const LOCKDOWN_ROUTE = "/lockdown";
-  // Home routes that are intentionally reachable from /connect before login.
-  const PUBLIC_HOME_ROUTES = ["/home/about", "/home/settings"];
   // Auth-protected route prefix.
   const HOME_PREFIX = "/home";
-
-  function isPublicHomeRoute(path: string) {
-    return PUBLIC_HOME_ROUTES.some((route) => path === route || path.startsWith(`${route}/`));
-  }
 
   const showRootLockdownBanner = $derived(
     serverStateStore.lockdown && page.url.pathname !== LOCKDOWN_ROUTE,
@@ -226,7 +226,7 @@
         appLockStore.resetForSignedOut();
       }
 
-      if (!hasReconnectTarget && !PUBLIC_ROUTES.includes(path) && path !== LOCKDOWN_ROUTE && !isPublicHomeRoute(path)) {
+      if (!hasReconnectTarget && !PUBLIC_ROUTES.includes(path) && path !== LOCKDOWN_ROUTE && !isPublicUtilityRoute(path)) {
         goto("/connect", { replaceState: true });
         return;
       }
@@ -235,7 +235,7 @@
     // 4. If connected but not logged in, and trying to access home routes,
     //    redirect to login.
     if (serverStateStore.connected && !authStore.isLoggedIn) {
-      if (path.startsWith(HOME_PREFIX) && !isPublicHomeRoute(path)) {
+      if (path.startsWith(HOME_PREFIX) && !isPublicUtilityRoute(path)) {
         goto("/login", { replaceState: true });
         return;
       }
@@ -321,6 +321,15 @@
   });
 
   onMount(() => () => appUpdateState.disposeAutomaticChecks());
+
+  // Community plugin state is device-wide rather than per-account, and the
+  // signed-out screens offer plugin pages in their top-right toolbar, so it is
+  // loaded once here rather than by the workspace layout. The management page
+  // refreshes the same store after an install, enable, or uninstall, and every
+  // surface that reads it follows reactively.
+  onMount(() => {
+    if (COMMUNITY_EXT_ENABLED) void comExtStore.refresh();
+  });
 
   $effect(() => {
     if (resetRecoveryMode) return;

@@ -99,6 +99,13 @@ pub const COM_EXT_CAPABILITIES: &[&str] = &[
     "ui.confirm",
     "storage.read",
     "storage.write",
+    // The sign-in form. These two are served by the running app rather than by
+    // the backend, because the form is component state and no command can read
+    // a Svelte variable. They are listed here all the same: this list is what a
+    // manifest is validated against, so a package that does not name them here
+    // could never be granted them.
+    "login.form.read",
+    "login.form.fill",
 ];
 
 /// Largest accepted package file, before decompression.

@@ -213,12 +213,10 @@
     void extensionsStore.activateForAccount(scope);
   });
 
-  // Community plugin state is device-wide rather than per-account, so it is
-  // loaded once. The management page refreshes the same store after an install,
-  // enable, or uninstall, and this layout's navigation follows it reactively.
-  onMount(() => {
-    if (COMMUNITY_EXT_ENABLED) void comExtStore.refresh();
-  });
+  // Community plugin state is device-wide rather than per-account, so the root
+  // layout loads it once for the whole app. The management page refreshes the
+  // same store after an install, enable, or uninstall, and this layout's
+  // navigation follows it reactively.
 
   // Fire community plugin lifecycle hooks when the signed-in state flips.
   //

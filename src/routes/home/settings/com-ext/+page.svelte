@@ -5,6 +5,7 @@
   import { _ as t } from 'svelte-i18n';
   import { type ComExtCapability, type ComExtInstallation } from '$lib/api/com-ext';
   import { comExtStore } from '$lib/com-ext.svelte';
+  import { CAPABILITY_LABEL_KEYS } from '$lib/com-ext-capability-labels';
   import { COMMUNITY_EXT_ENABLED } from '$lib/feature-flags';
   import { notificationStore } from '$lib/stores.svelte';
   import { isMobilePlatform } from '$lib/platform';
@@ -14,21 +15,6 @@
 
   let busy = $state<string | null>(null);
   const mobile = isMobilePlatform();
-
-  const CAPABILITY_LABEL_KEYS: Record<ComExtCapability, string> = {
-    'files.list': 'settings.comExt.capabilities.files_list',
-    'files.metadata.read': 'settings.comExt.capabilities.files_metadata_read',
-    'files.search': 'settings.comExt.capabilities.files_search',
-    'files.open': 'settings.comExt.capabilities.files_open',
-    'tasks.read': 'settings.comExt.capabilities.tasks_read',
-    'transfers.download.enqueue': 'settings.comExt.capabilities.transfers_download_enqueue',
-    'account.summary.read': 'settings.comExt.capabilities.account_summary_read',
-    'events.subscribe': 'settings.comExt.capabilities.events_subscribe',
-    'ui.notify': 'settings.comExt.capabilities.ui_notify',
-    'ui.confirm': 'settings.comExt.capabilities.ui_confirm',
-    'storage.read': 'settings.comExt.capabilities.storage_read',
-    'storage.write': 'settings.comExt.capabilities.storage_write',
-  };
 
   onMount(() => {
     // Direct URL access stays closed while the community interface is off.

@@ -794,6 +794,30 @@ mod tests {
 
         assert!(error.contains("overview-section"), "got: {error}");
         assert!(error.contains("settings-section"), "got: {error}");
+        assert!(error.contains("login-section"), "got: {error}");
+    }
+
+    /// The sign-in screen is the one point that sits inside a form the user is
+    /// about to submit, so a package targeting it must be accepted rather than
+    /// rejected as unknown.
+    #[test]
+    fn accepts_the_login_section_slot_point() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "slots": [{"id":"remember","point":"login-section","page":"home"}]"#,
+                )
+                .as_bytes(),
+            ),
+            (
+                "pages/home.json",
+                br#"{"schema_version":1,"title":"Panel","blocks":[]}"#,
+            ),
+        ]);
+
+        validate_package(&package).expect("login-section must be a known point");
     }
 
     #[test]

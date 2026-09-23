@@ -8,9 +8,10 @@
 // its button, and checking the answer. A regression in the page contract, the
 // mount, or the tool logic all land here.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { createComExtPageHost } from '$lib/com-ext-page-host';
 
 const pluginPage = resolve('plugins/tools/dist/pages/tools.html');
 
@@ -32,13 +33,16 @@ function mountPluginPage(html: string, pluginId: string): ShadowRoot {
   for (const node of parsed.body.childNodes) fragment.append(node.cloneNode(true));
   shadow.append(fragment);
 
-  for (const code of scripts) new Function('root', 'pluginId', code)(shadow, pluginId);
+  for (const code of scripts) {
+    new Function('root', 'pluginId', 'host', code)(shadow, pluginId, createComExtPageHost(pluginId));
+  }
   return shadow;
 }
 
-const describeIfBuilt = existsSync(pluginPage) ? describe : describe.skip;
-
-describeIfBuilt('built 小工具 plugin page', () => {
+// The artifact is not committed, so `vitest.global-setup.ts` builds it before
+// the suite runs. Reading it unconditionally makes a missing build a failure
+// rather than a silently skipped — and therefore green — test.
+describe('built 小工具 plugin page', () => {
   const html = readFileSync(pluginPage, 'utf8');
 
   it('renders a tab per tool', () => {

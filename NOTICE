@@ -35,6 +35,19 @@ Added:
   * `scripts/pack-com-ext.mjs` and `scripts/build-com-ext.mjs`, `plugins/tools/`,
     and `docs/community-plugins.md` — a packaging tool, the first community
     plugin, and its authoring guide.
+  * `src/lib/com-ext-page-host.ts`, `src/lib/com-ext-events.ts`,
+    `src/lib/com-ext-local-capabilities.ts`, and
+    `src/lib/com-ext-capability-labels.ts` — the bridge a plugin page is handed,
+    the host-to-page event channel, the registry that lets a running screen
+    answer a capability, and the capability wording shared by the grant prompt
+    and the bridge's confirmation.
+  * `src/lib/components/ComExtLaunchMenu.svelte` — the plugin launcher in the
+    top-right toolbar of the signed-out screens.
+  * `scripts/lib/com-ext-page-build.mjs` — the plugin page build shared by every
+    plugin that ships its own page code.
+  * `plugins/remember/` — the second community plugin, 记住用户名密码, and the
+    worked example for a plugin that renders on a host screen and reaches the
+    host through the bridge.
 
 Modified:
 
@@ -64,6 +77,23 @@ Modified:
     contributes to it.
   * `src/routes/home/settings/com-ext/+page.svelte` — a plugin that requests no
     capabilities is enabled as it is installed, so adding one is a single step.
+  * `src/routes/login/+page.svelte` and `src/routes/connect/+page.svelte` — each
+    gained the plugin launcher in its top-right toolbar, and the sign-in screen
+    additionally gained a mount point for plugin contributions and answers the
+    two capabilities that read and fill its own fields. The credentials are
+    passed to a subscribing plugin at the moment the server accepts them, which
+    is the only moment they exist.
+  * `src/lib/public-utility-navigation.ts` and `src/routes/+layout.svelte` — the
+    list of workspace screens reachable without an account is now defined once
+    and read by both the route gate and the toolbar that links to them. Keeping
+    two copies let them drift, which left a plugin page offered in the toolbar
+    and refused by the gate.
+  * `crates/service/src/com_ext/manifest.rs`, `crates/service/src/com_ext/mod.rs`,
+    and `crates/service/src/com_ext/package.rs` — a third slot point for the
+    sign-in screen, and the two capabilities that read and fill it.
+  * `plugins/tools/build.mjs` — reduced to a description of that plugin's inputs;
+    the bundling it used to do now lives in the shared module above. Its output
+    is unchanged.
   * `package.json` — devDependencies and scripts for building plugin packages.
   * `src/lib/extension-workflows.ts` and
     `src/lib/components/ExtensionPageRenderer.svelte` — the declarative workflow

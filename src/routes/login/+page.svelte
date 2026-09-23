@@ -53,6 +53,12 @@
   import { downloadStore } from "$lib/stores.svelte";
   import { appearanceStore } from "$lib/appearance.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import ComExtLaunchMenu from "$lib/components/ComExtLaunchMenu.svelte";
+  import ComExtSlot from "$lib/components/ComExtSlot.svelte";
+  import { comExtStore } from "$lib/com-ext.svelte";
+  import { dispatchComExtEvent } from "$lib/com-ext-events";
+  import { provideComExtLocalCapability } from "$lib/com-ext-local-capabilities";
+  import { COMMUNITY_EXT_ENABLED } from "$lib/feature-flags";
   import ProgressRing from "$lib/components/ProgressRing.svelte";
   import AvatarPreview from "$lib/components/AvatarPreview.svelte";
   import AuthServerContext from "$lib/components/AuthServerContext.svelte";
@@ -393,6 +399,11 @@
     authStore.apply(authStatus);
     serverStateStore.apply(serverState);
 
+    // The credentials the server just accepted still exist only here and now.
+    // A plugin that asked to hear about a successful sign-in is told before
+    // they are dropped, because storing what it is never given is impossible.
+    notifyCommunityPluginsOfLogin(username.trim(), password || pendingPassword);
+
     // Clear password from JS memory.
     password = "";
     pendingPassword = "";
@@ -401,6 +412,25 @@
       ? '/lockdown'
       : '/home/overview';
     await goto(destination);
+  }
+
+  /**
+   * Tell the plugins entitled to know that a sign-in succeeded.
+   *
+   * Delivery is addressed from the grant list rather than broadcast, so the
+   * decision about who receives a password rests on what the user approved and
+   * not on who happens to be listening. The event carries the credentials
+   * because that is the entire point of the capability: a plugin that remembers
+   * a password can only store one it was handed.
+   */
+  function notifyCommunityPluginsOfLogin(signedInAs: string, secret: string) {
+    if (!COMMUNITY_EXT_ENABLED) return;
+    const audience = comExtStore.pluginsGranting('login.form.read');
+    if (audience.length === 0) return;
+    dispatchComExtEvent(audience, 'login.succeeded', {
+      username: signedInAs,
+      password: secret,
+    });
   }
 
   const serverName = $derived(serverStateStore.serverName ?? "CFMS Server");
@@ -460,6 +490,33 @@
       return;
     }
     void focusUsernameInput();
+  });
+
+  // The sign-in form is component state, so no backend command can answer for
+  // it: the capabilities below are served here instead, for exactly as long as
+  // this screen is mounted. A plugin that declared one of them reaches it
+  // through the page bridge, and the bridge checks the grant before asking.
+  onMount(() => {
+    if (!COMMUNITY_EXT_ENABLED) return;
+
+    const releases = [
+      provideComExtLocalCapability('login.form.read', () => ({
+        username,
+        password,
+        // The connection the form belongs to, so a plugin can keep one set of
+        // saved accounts per server instead of one per device.
+        server: serverStateStore.remoteAddress ?? '',
+      })),
+      provideComExtLocalCapability('login.form.fill', (_pluginId, args) => {
+        if (typeof args.username === 'string') username = args.username;
+        if (typeof args.password === 'string') password = args.password;
+        return { filled: true };
+      }),
+    ];
+
+    return () => {
+      for (const release of releases) release();
+    };
   });
 
   async function focusUsernameInput() {
@@ -731,6 +788,7 @@
     >
       <Icon name="keyboard" size="18px" />
     </button>
+    <ComExtLaunchMenu />
   </div>
   <section class="auth-panel">
   <div
@@ -885,6 +943,13 @@
             </p>
           {/if}
         </div>
+
+        <!-- Plugin contributions to the sign-in form. This is the only slot
+             point inside a form the user is about to submit, so it is where a
+             plugin that remembers what they typed — saved accounts, a "remember
+             me" checkbox — renders. It sits under the password field and above
+             the sign-in button, which is where such a control is looked for. -->
+        <ComExtSlot point="login-section" variant="plain" />
 
         <!-- Password change required (4001/4002) — offer in-app change. -->
         {#if passwordChangeRequired}
