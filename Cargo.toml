@@ -10,10 +10,11 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.51.1"
+version = "1.0.0"
 edition = "2024"
 license = "Apache-2.0"
-repository = "https://github.com/cfms-dev/cfms_client_tauri"
+# Community Edition. Derived from https://github.com/cfms-dev/cfms_client_tauri
+repository = "https://github.com/Rosmontis220/cfms_client_tauri-community"
 
 [workspace.dependencies]
 # ---------------------------------------------------------------------------

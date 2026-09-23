@@ -4,6 +4,39 @@ This file is the product changelog shown inside the app. Keep entries newest fir
 
 ---
 
+## v1.0.0
+**Released on:** 2026-09-23
+
+**Title:** Community Edition with a plugin system
+
+The first release of CFMS Client — Community Edition, an independent build based
+on upstream v0.51.1. It is not affiliated with, endorsed by, or supported by the
+CFMS Client project.
+
+### Added
+- **Community plugins.** Distributed as `.cfmscomext` packages, a plugin can add
+  navigation entries, settings sections, pages, file-row and toolbar
+  contributions, background actions, and lifecycle hooks.
+- **A plugin manager** under Settings, listing each installed plugin with its
+  requested capabilities and disk usage, with per-plugin enable switches and
+  uninstall.
+- **A capability-based permission model.** A plugin can only reach host APIs it
+  declared in its manifest and that you approved when you enabled it. Opening or
+  downloading a file always asks for confirmation first.
+
+### Improved
+- The in-app updater now reads this edition's own releases. Left pointing at the
+  upstream repository, an update would have replaced this build with an official
+  one and silently removed every community plugin.
+
+### Notes
+- The official signed extension interface is unchanged and still available
+  alongside the community one. The two share no state.
+- Community plugins are not signature-verified. Only install packages whose
+  source you trust.
+
+--- 
+
 ## v0.51.1
 **Released on:** 2026-09-11
 

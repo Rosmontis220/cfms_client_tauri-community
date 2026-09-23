@@ -34,8 +34,21 @@ Modified:
     would replace the installed binary with an official build and silently
     discard the community plugin interface.
   * `src-tauri/src/lib.rs`, `src/lib/feature-flags.ts`,
-    `src/lib/settings-entries.ts`, and the locale message catalogues — additive
-    wiring for the interface above.
+    `src/lib/settings-entries.ts`, `src/lib/navigation.ts`,
+    `src/routes/home/+layout.svelte`, and the locale message catalogues —
+    additive wiring for the interface above.
+  * `src/lib/extension-workflows.ts` and
+    `src/lib/components/ExtensionPageRenderer.svelte` — the declarative workflow
+    engine and the page renderer were extracted into `src/lib/declarative-workflow.ts`,
+    `src/lib/declarative-page.ts`, and
+    `src/lib/components/DeclarativePageRenderer.svelte`, which the official and
+    community interfaces now share. Both upstream files keep their existing
+    public API and behaviour and are now thin adapters over the shared
+    implementation. Extracting them was preferred to duplicating roughly two
+    hundred lines of interpreter logic that would otherwise drift between the
+    two interfaces.
+  * Version metadata and `src/lib/changelog/CHANGELOG.md` were reset to this
+    edition's own `1.0.0` release.
 
 Deliberately unmodified:
 

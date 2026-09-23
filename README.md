@@ -1,10 +1,23 @@
-# CFMS Client
+# CFMS Client — Community Edition
 
-[![CI](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml/badge.svg)](https://github.com/cfms-dev/cfms_client_tauri/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/cfms-dev/cfms_client_tauri?display_name=tag)](https://github.com/cfms-dev/cfms_client_tauri/releases)
+[![CI](https://github.com/Rosmontis220/cfms_client_tauri-community/actions/workflows/ci.yml/badge.svg)](https://github.com/Rosmontis220/cfms_client_tauri-community/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Rosmontis220/cfms_client_tauri-community?display_name=tag)](https://github.com/Rosmontis220/cfms_client_tauri-community/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**CFMS Client** is the cross-platform client for the [Confidential File Management System (CFMS)](https://github.com/cfms-dev). It securely connects to CFMS servers, provides controlled access to confidential documents, and manages file transfers. The application targets a native desktop experience and also supports Android.
+**CFMS Client — Community Edition** is an independent build of the cross-platform client for the [Confidential File Management System (CFMS)](https://github.com/cfms-dev), based on upstream v0.51.1 and maintained for a private group of users.
+
+> [!IMPORTANT]
+> This is **not** the official CFMS Client. It is not affiliated with, endorsed by, or supported by the CFMS Client project. [NOTICE](NOTICE) lists what differs from upstream. For the official client, see [cfms-dev/cfms_client_tauri](https://github.com/cfms-dev/cfms_client_tauri).
+
+It securely connects to CFMS servers, provides controlled access to confidential documents, and manages file transfers. The application targets a native desktop experience and also supports Android.
+
+## Community plugins
+
+This edition adds a plugin system alongside the official signed extension interface:
+
+- Plugins are distributed as `.cfmscomext` packages and managed under **Settings → Community plugins**.
+- The official `extension_*` interface is unchanged and the two share no state, so both can be used at the same time.
+- Community plugins are **not** signature-verified. Only install packages whose source you trust.
 
 > [!IMPORTANT]
 > This client is intended only for deployed CFMS servers that you are authorized to access. It is not a general-purpose cloud-drive or file-server client.
@@ -32,8 +45,8 @@ On Windows, you will normally also need the Visual Studio **Desktop development 
 ### Install dependencies
 
 ```powershell
-git clone --recurse-submodules https://github.com/cfms-dev/cfms_client_tauri.git
-Set-Location cfms_client_tauri
+git clone --recurse-submodules https://github.com/Rosmontis220/cfms_client_tauri-community.git
+Set-Location cfms_client_tauri-community
 pnpm install --frozen-lockfile
 ```
 
