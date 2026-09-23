@@ -205,3 +205,24 @@ export function removeComExtStorage(pluginId: string, key: string): Promise<void
 export function clearComExtStorage(pluginId: string): Promise<void> {
   return invoke('clear_com_ext_storage', { pluginId });
 }
+
+/**
+ * Invoke a host capability on behalf of a plugin.
+ *
+ * The backend re-checks authorization on every call, so passing a capability
+ * here grants nothing by itself. `userConfirmed` is required for capabilities
+ * that cause a real side effect (opening or downloading a file).
+ */
+export function executeComExtHostCall<T = unknown>(
+  pluginId: string,
+  capability: ComExtCapability,
+  args: unknown = {},
+  userConfirmed?: boolean,
+): Promise<T> {
+  return invoke('execute_com_ext_host_call', {
+    pluginId,
+    capability,
+    arguments: args,
+    userConfirmed,
+  });
+}

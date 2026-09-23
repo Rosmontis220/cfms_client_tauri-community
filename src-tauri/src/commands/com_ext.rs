@@ -192,3 +192,160 @@ pub async fn clear_com_ext_storage(
         .await
         .map_err(|e| format!("Community plugin storage clear task failed: {e}"))?
 }
+
+/// Broker a host call from a plugin.
+///
+/// The authorization check runs first and is the only gate: a capability must
+/// be declared in the installed manifest *and* present in the recorded grant.
+/// The dispatcher below therefore never has to re-check permissions, and an
+/// unknown capability can never fall through to a handler.
+///
+/// `files.open` and `transfers.download.enqueue` both cause a real download, so
+/// both require `userConfirmed`, exactly as the official broker does.
+#[tauri::command]
+pub async fn execute_com_ext_host_call(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppHandleState>,
+    plugin_id: String,
+    capability: String,
+    arguments: serde_json::Value,
+    user_confirmed: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    {
+        let store = state.com_ext.clone();
+        let gate_plugin = plugin_id.clone();
+        let gate_capability = capability.clone();
+        tokio::task::spawn_blocking(move || store.authorize(&gate_plugin, &gate_capability))
+            .await
+            .map_err(|e| format!("Community plugin authorization task failed: {e}"))??;
+    }
+
+    match capability.as_str() {
+        "account.summary.read" => Ok(serde_json::json!({
+            "username": state.inner.username.read().await.clone(),
+            "nickname": state.inner.nickname.read().await.clone(),
+            "server": state.inner.server_name.read().await.clone(),
+            "permissions": state.inner.permissions.read().await.clone(),
+            "groups": state.inner.groups.read().await.clone(),
+        })),
+        "tasks.read" => serde_json::to_value(state.tasks.list(None))
+            .map_err(|e| format!("Failed to serialize tasks: {e}")),
+        "files.list" => {
+            let folder_id = arguments
+                .get("folderId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let listing = fetch_all_listing_pages(
+                &state,
+                "list_directory",
+                serde_json::json!({ "folder_id": folder_id }),
+            )
+            .await?;
+            serde_json::to_value(listing)
+                .map_err(|e| format!("Failed to serialize directory listing: {e}"))
+        }
+        "files.search" => {
+            let query = arguments
+                .get("query")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "files.search requires a query".to_string())?;
+            if query.trim().is_empty() {
+                return Err("Search query cannot be empty".into());
+            }
+            server_action_json(
+                &state,
+                "search",
+                serde_json::json!({
+                    "query": query.trim(),
+                    "page_size": 128,
+                    "sort_by": "name",
+                    "sort_order": "asc",
+                    "search_documents": true,
+                    "search_directories": true,
+                }),
+            )
+            .await
+        }
+        "files.metadata.read" => {
+            let document_id = arguments
+                .get("documentId")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "files.metadata.read requires documentId".to_string())?;
+            server_action_json(
+                &state,
+                "get_document_info",
+                serde_json::json!({ "document_id": document_id }),
+            )
+            .await
+        }
+        "files.open" | "transfers.download.enqueue" => {
+            if user_confirmed != Some(true) {
+                return Err(
+                    "A user confirmation is required before opening or downloading a file".into(),
+                );
+            }
+            let document_id = arguments
+                .get("documentId")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| format!("{capability} requires documentId"))?;
+            let filename = arguments
+                .get("filename")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| format!("{capability} requires filename"))?;
+            get_document(
+                app_handle,
+                state,
+                document_id.to_string(),
+                filename.to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+        }
+        "storage.read" => {
+            let key = arguments
+                .get("key")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "storage.read requires a key".to_string())?
+                .to_string();
+            let store = state.com_ext.clone();
+            let plugin = plugin_id.clone();
+            let value = tokio::task::spawn_blocking(move || store.storage_get(&plugin, &key))
+                .await
+                .map_err(|e| format!("Community plugin storage read task failed: {e}"))??;
+            Ok(serde_json::json!({ "value": value }))
+        }
+        "storage.write" => {
+            let key = arguments
+                .get("key")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "storage.write requires a key".to_string())?
+                .to_string();
+            let value = arguments
+                .get("value")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "storage.write requires a string value".to_string())?
+                .to_string();
+            let store = state.com_ext.clone();
+            let plugin = plugin_id.clone();
+            tokio::task::spawn_blocking(move || store.storage_set(&plugin, &key, &value))
+                .await
+                .map_err(|e| format!("Community plugin storage write task failed: {e}"))??;
+            Ok(serde_json::json!({ "saved": true }))
+        }
+        "ui.confirm" => Ok(serde_json::json!({
+            "requiresUserConfirmation": true,
+            "request": arguments,
+        })),
+        "ui.notify" => Ok(serde_json::json!({ "notification": arguments })),
+        "events.subscribe" => Ok(serde_json::json!({
+            "supportedEvents": ["connection.changed", "tasks.changed"],
+        })),
+        // `authorize` already rejected anything outside the host's capability
+        // list, so this arm is unreachable for a well-formed call.
+        other => Err(format!("Unsupported community plugin capability \"{other}\"")),
+    }
+}

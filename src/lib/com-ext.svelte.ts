@@ -1,11 +1,26 @@
 import {
+  executeComExtHostCall,
   getComExtOverview,
   importComExtPackage,
   setComExtEnabled,
   uninstallComExtPlugin,
+  type ComExtCapability,
   type ComExtInstallation,
   type ComExtOverview,
 } from '$lib/api/com-ext';
+
+/**
+ * Capabilities that cause a real, user-visible side effect.
+ *
+ * Both of these start a download onto the user's disk, so the broker refuses to
+ * forward them unless the caller has obtained explicit confirmation.  The
+ * backend enforces the same rule, so this is defence in depth rather than the
+ * only barrier.
+ */
+const SIDE_EFFECTING_CAPABILITIES: ReadonlySet<ComExtCapability> = new Set([
+  'files.open',
+  'transfers.download.enqueue',
+]);
 
 /**
  * Community plugin state.
@@ -66,6 +81,36 @@ class ComExtStore {
   async uninstall(pluginId: string): Promise<void> {
     await uninstallComExtPlugin(pluginId);
     await this.refresh();
+  }
+
+  /**
+   * Invoke a host capability on behalf of a plugin.
+   *
+   * `confirm` is consulted only for side-effecting capabilities; when it is
+   * absent or declines, the call is refused without reaching the backend.
+   */
+  async callHost<T = unknown>(
+    pluginId: string,
+    capability: ComExtCapability,
+    args: Record<string, unknown> = {},
+    confirm?: (summary: string) => boolean,
+  ): Promise<T> {
+    let userConfirmed: boolean | undefined;
+
+    if (SIDE_EFFECTING_CAPABILITIES.has(capability)) {
+      const summary =
+        typeof args.filename === 'string'
+          ? args.filename
+          : typeof args.documentId === 'string'
+            ? args.documentId
+            : '';
+      if (!confirm?.(summary)) {
+        throw new Error('The user declined this action.');
+      }
+      userConfirmed = true;
+    }
+
+    return executeComExtHostCall<T>(pluginId, capability, args, userConfirmed);
   }
 }
 

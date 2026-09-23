@@ -304,6 +304,48 @@ impl ComExtStore {
         self.save_state(&state)
     }
 
+    // -- host-call authorization ---------------------------------------------
+
+    /// Authorize a host call from a plugin.
+    ///
+    /// A capability must be **both** declared in the installed manifest and
+    /// present in the recorded grant.  Checking the manifest as well as the
+    /// grant means a grant left over from an older version cannot be spent on a
+    /// capability that version never had, and checking the grant means a
+    /// manifest edit alone cannot widen what the user approved.
+    pub fn authorize(&self, plugin_id: &str, capability: &str) -> Result<(), String> {
+        if !super::COM_EXT_CAPABILITIES.contains(&capability) {
+            return Err(format!("Unknown capability \"{capability}\""));
+        }
+        let installation = self
+            .get_installed(plugin_id)?
+            .ok_or_else(|| format!("Plugin \"{plugin_id}\" is not installed"))?;
+        if !installation.enabled {
+            return Err(format!("Plugin \"{plugin_id}\" is not enabled"));
+        }
+        if !installation
+            .manifest
+            .requested_capabilities
+            .iter()
+            .any(|item| item == capability)
+        {
+            return Err(format!(
+                "Plugin \"{}\" did not request capability \"{capability}\"",
+                installation.manifest.name
+            ));
+        }
+        if !installation
+            .granted_capabilities
+            .iter()
+            .any(|item| item == capability)
+        {
+            return Err(format!(
+                "Plugin capability \"{capability}\" is not authorized"
+            ));
+        }
+        Ok(())
+    }
+
     // -- document access -----------------------------------------------------
 
     /// Read a page document from an enabled plugin.
@@ -777,6 +819,96 @@ mod tests {
         assert!(
             error.contains("invalid characters") || error.contains("reverse-domain"),
             "got: {error}"
+        );
+    }
+
+    // -- host-call authorization ---------------------------------------------
+
+    #[test]
+    fn authorize_allows_a_declared_and_granted_capability() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list","tasks.read""#))
+            .unwrap();
+        store.set_enabled("org.example.test", true).unwrap();
+
+        store.authorize("org.example.test", "files.list").unwrap();
+        store.authorize("org.example.test", "tasks.read").unwrap();
+    }
+
+    #[test]
+    fn authorize_rejects_a_capability_the_manifest_never_declared() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+        store.set_enabled("org.example.test", true).unwrap();
+
+        let error = store
+            .authorize("org.example.test", "storage.write")
+            .expect_err("must be refused");
+        assert!(error.contains("did not request"), "got: {error}");
+    }
+
+    #[test]
+    fn authorize_rejects_a_capability_the_host_does_not_define() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+        store.set_enabled("org.example.test", true).unwrap();
+
+        let error = store
+            .authorize("org.example.test", "files.delete")
+            .expect_err("must be refused");
+        assert!(error.contains("Unknown capability"), "got: {error}");
+    }
+
+    #[test]
+    fn authorize_rejects_a_disabled_plugin() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+
+        let error = store
+            .authorize("org.example.test", "files.list")
+            .expect_err("must be refused");
+        assert!(error.contains("not enabled"), "got: {error}");
+    }
+
+    #[test]
+    fn disabling_revokes_host_call_authorization() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+        store.set_enabled("org.example.test", true).unwrap();
+        store.authorize("org.example.test", "files.list").unwrap();
+
+        store.set_enabled("org.example.test", false).unwrap();
+
+        assert!(
+            store.authorize("org.example.test", "files.list").is_err(),
+            "disabling must revoke host-call authorization"
+        );
+    }
+
+    #[test]
+    fn reinstalling_revokes_host_call_authorization() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+        store.set_enabled("org.example.test", true).unwrap();
+
+        store
+            .install_package(&package("org.example.test", r#""files.list""#))
+            .unwrap();
+
+        assert!(
+            store.authorize("org.example.test", "files.list").is_err(),
+            "a fresh install must not inherit the previous grant"
         );
     }
 

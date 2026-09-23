@@ -594,6 +594,7 @@ pub fn run() {
             commands::set_com_ext_storage,
             commands::remove_com_ext_storage,
             commands::clear_com_ext_storage,
+            commands::execute_com_ext_host_call,
             commands::send_developer_request,
             commands::get_locale,
             commands::set_locale,
