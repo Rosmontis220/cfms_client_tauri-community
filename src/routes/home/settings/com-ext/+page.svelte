@@ -166,7 +166,7 @@
                 <h3>{installation.manifest.name}</h3>
                 <p>{installation.manifest.description}</p>
                 <small>
-                  {installation.manifest.publisher} · v{installation.manifest.version} · {formatBytes(installation.disk_bytes)}
+                  {$t('settings.comExt.publisher')}：{installation.manifest.publisher} · v{installation.manifest.version} · {formatBytes(installation.disk_bytes)}
                 </small>
               </div>
               <label class="switch">

@@ -19,6 +19,23 @@ This edition adds a plugin system alongside the official signed extension interf
 - The official `extension_*` interface is unchanged and the two share no state, so both can be used at the same time.
 - Community plugins are **not** signature-verified. Only install packages whose source you trust.
 
+**Installing a plugin** — open **Settings → Community plugins**, click **Import plugin package**, and pick a `.cfmscomext` file. A plugin that requests no capabilities is enabled as it installs; one that requests capabilities waits for you to grant them. An enabled plugin that contributes a navigation entry appears in the sidebar.
+
+**Writing a plugin** — see [docs/community-plugins.md](docs/community-plugins.md) for the full guide. The short version:
+
+1. Create a directory with a `com_ext.json` manifest and a `pages/<page-id>.html` file. The page is one self-contained HTML file; it may carry its own markup, styles, and scripts.
+2. Build it as an IIFE exporting `mount(root, pluginId)`, or use the declarative page format if your feature is a form over host data rather than a computation.
+3. Package and install it:
+
+   ```bash
+   pnpm plugin:build tools           # run plugins/tools' build step, then pack it
+   pnpm plugin:pack ./plugins/tools  # pack a plugin directory that is already built
+   pnpm plugin:pack --all            # pack every plugin under ./plugins into ./dist-plugins
+   pnpm test:plugin                  # the packer's own test suite
+   ```
+
+A worked example lives in [`plugins/tools`](plugins/tools) — 小工具, a page of cipher and encoding tools. The manifest records its author in `publisher`, shown on the plugin's card in Settings.
+
 > [!IMPORTANT]
 > This client is intended only for deployed CFMS servers that you are authorized to access. It is not a general-purpose cloud-drive or file-server client.
 

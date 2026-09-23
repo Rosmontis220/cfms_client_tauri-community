@@ -1589,7 +1589,7 @@ export const zh_CN = {
       noPermissions: '此插件未请求任何能力。',
       granted: '已授权',
       version: '版本',
-      publisher: '发布者',
+      publisher: '作者',
       root: '安装位置',
       unsignedWarning: '社区插件没有签名校验，请只安装你信任来源的插件包。',
       capabilitiesTitle: '能力说明',

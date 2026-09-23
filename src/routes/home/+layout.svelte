@@ -50,6 +50,8 @@
   let favoritesLoading = $state(false);
   let loadedFavoriteScope = '';
   let routeReloadToken = $state(0);
+  let routeScrollViewport = $state<HTMLElement | null>(null);
+  let lastScrollTarget = '';
   let accountTriggerElement = $state<HTMLButtonElement | null>(null);
 
   const showKeyboardShortcutEntry = supportsKeyboardShortcuts();
@@ -176,6 +178,21 @@
   });
 
   const favoriteFolders = $derived(favorites.filter((record) => record.type === 'directory'));
+
+  // The route view is this app's own scroll container, so SvelteKit cannot
+  // manage it the way it manages the document. Without this, a page inherits
+  // the previous page's offset — clamped to its own height — so arriving from a
+  // long list reads as "the page opened at the bottom".
+  //
+  // The query string is part of the key because every query parameter in this
+  // app selects a different view: a plugin page, a deep-linked folder, a
+  // recycle-bin location. Those are navigations, not in-page state.
+  $effect(() => {
+    const target = `${$page.url.pathname}${$page.url.search}`;
+    if (target === lastScrollTarget) return;
+    lastScrollTarget = target;
+    routeScrollViewport?.scrollTo({ top: 0 });
+  });
 
   $effect(() => {
     const scope = `${serverStateStore.remoteAddress ?? ''}:${authStore.username ?? ''}`;
@@ -643,7 +660,7 @@
       tabindex="-1"
     >
       {#key routeReloadToken}
-        <div class="explorer-route-view">
+        <div class="explorer-route-view" bind:this={routeScrollViewport}>
           {@render children()}
         </div>
       {/key}

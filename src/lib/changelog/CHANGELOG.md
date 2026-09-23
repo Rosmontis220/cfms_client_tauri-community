@@ -46,6 +46,12 @@ CFMS Client project.
   carried over from the reference implementation and checked against its
   recorded outputs.
 
+### Fixed
+- Opening a page no longer starts halfway down it. The workspace scrolls inside
+  its own element rather than the document, so the previous page's offset was
+  carried over and then clamped to the new page's height — arriving at a short
+  page from a long list looked like it had opened at the bottom.
+
 ### Improved
 - The in-app updater now reads this edition's own releases. Left pointing at the
   upstream repository, an update would have replaced this build with an official

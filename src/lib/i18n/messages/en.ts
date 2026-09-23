@@ -1600,7 +1600,7 @@ export const en = {
       noPermissions: 'This plugin requests no capabilities.',
       granted: 'Granted',
       version: 'Version',
-      publisher: 'Publisher',
+      publisher: 'Author',
       root: 'Install location',
       unsignedWarning: 'Community plugins are not signature-verified. Only install packages from sources you trust.',
       capabilitiesTitle: 'Capability reference',
