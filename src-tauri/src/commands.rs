@@ -35,8 +35,12 @@ use crate::{
 };
 use crate::{AppHandleState, UploadInterruption};
 
+// Community edition: the updater must read *this* fork's releases, never the
+// upstream repository's. Pointing it at `cfms-dev/cfms_client_tauri` would let
+// an update replace the installed binary with an official build, silently
+// discarding the `com_ext` interface and every community plugin with it.
 const UPDATE_RELEASES_API: &str =
-    "https://api.github.com/repos/cfms-dev/cfms_client_tauri/releases";
+    "https://api.github.com/repos/Rosmontis220/cfms_client_tauri-community/releases";
 const UPDATE_USER_AGENT: &str = "cfms-client-tauri-updater";
 const UPDATE_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 const UPDATE_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -60,6 +64,7 @@ include!("commands/schedules.rs");
 include!("commands/browsing.rs");
 include!("commands/settings.rs");
 include!("commands/extensions.rs");
+include!("commands/com_ext.rs");
 include!("commands/developer.rs");
 include!("commands/auth_connection.rs");
 include!("commands/avatars.rs");

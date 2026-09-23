@@ -15,6 +15,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod com_ext;
 pub mod db;
 pub mod extensions;
 pub mod scan;

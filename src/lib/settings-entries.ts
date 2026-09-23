@@ -1,5 +1,5 @@
 import type { IconName } from '$lib/icons';
-import { USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
+import { COMMUNITY_EXT_ENABLED, USER_EXTENSIONS_ENABLED } from '$lib/feature-flags';
 import { isMobilePlatform } from '$lib/platform';
 
 type SettingsPlatformScope = 'all' | 'mobile';
@@ -29,7 +29,14 @@ export interface SettingsEntry {
   tone?: 'default' | 'danger';
   requiresAuth?: boolean;
   platformScope?: SettingsPlatformScope;
-  feature?: 'extensions';
+  /**
+   * Gates an entry behind a feature flag.
+   *
+   * `extensions` is the official interface, `comExt` the community one.  They
+   * are independent flags so neither surface can be turned on or off by the
+   * other's state.
+   */
+  feature?: 'extensions' | 'comExt';
 }
 
 interface SettingsEntryVisibilityContext {
@@ -146,6 +153,14 @@ export const SETTINGS_ENTRIES: readonly SettingsEntry[] = [
     feature: 'extensions',
   },
   {
+    labelKey: 'settings.comExt.title',
+    descriptionKey: 'settings.comExt.description',
+    icon: 'extensions',
+    href: '/home/settings/com-ext',
+    group: 'maintenance',
+    feature: 'comExt',
+  },
+  {
     labelKey: 'settings.updates.title',
     descriptionKey: 'settings.updates.description',
     icon: 'browserUpdated',
@@ -176,6 +191,7 @@ export function isSettingsEntryVisible(
   context: SettingsEntryVisibilityContext,
 ): boolean {
   if (entry.feature === 'extensions' && !USER_EXTENSIONS_ENABLED) return false;
+  if (entry.feature === 'comExt' && !COMMUNITY_EXT_ENABLED) return false;
   if (entry.requiresAuth && !context.isLoggedIn) return false;
   if (entry.platformScope === 'mobile') return context.isMobile ?? isMobilePlatform();
   return true;

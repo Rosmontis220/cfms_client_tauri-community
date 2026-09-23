@@ -26,6 +26,7 @@ use tauri_plugin_log::log::LevelFilter;
 use tauri_plugin_log::{Target, TargetKind};
 use tokio::sync::watch;
 
+use cfms_service::com_ext::ComExtStore;
 use cfms_service::db::settings::SettingsStore;
 use cfms_service::extensions::ExtensionStore;
 use cfms_service::service::manager::ServiceManager;
@@ -229,6 +230,13 @@ pub struct AppHandleState {
     /// Device-global signed extension packages and catalog metadata.
     pub extensions: ExtensionStore,
 
+    /// Device-global community plugins (`.cfmscomext`).
+    ///
+    /// Independent of [`Self::extensions`] in every respect: separate package
+    /// format, storage root, state, and capability set.  Both interfaces are
+    /// live at once.
+    pub com_ext: ComExtStore,
+
     /// Registry of active downloads (cancellation flags).
     pub active_downloads: ActiveRegistry,
 
@@ -387,6 +395,8 @@ pub fn run() {
             let settings = SettingsStore::new(db);
             let extensions =
                 ExtensionStore::new(settings.clone(), &app_data_dir, env!("CARGO_PKG_VERSION"));
+            let com_ext =
+                ComExtStore::new(settings.clone(), &app_data_dir, env!("CARGO_PKG_VERSION"));
             let initial_locale = settings
                 .get("language")
                 .ok()
@@ -497,6 +507,7 @@ pub fn run() {
                 upload_tasks,
                 settings,
                 extensions,
+                com_ext,
                 active_downloads,
                 active_uploads,
                 connect_attempts: ConnectAttemptRegistry::default(),
@@ -572,6 +583,17 @@ pub fn run() {
             commands::read_extension_page,
             commands::read_extension_workflow,
             commands::execute_extension_host_call,
+            commands::get_com_ext_overview,
+            commands::import_com_ext_package,
+            commands::uninstall_com_ext_plugin,
+            commands::set_com_ext_enabled,
+            commands::read_com_ext_page,
+            commands::read_com_ext_workflow,
+            commands::read_com_ext_contribution,
+            commands::get_com_ext_storage,
+            commands::set_com_ext_storage,
+            commands::remove_com_ext_storage,
+            commands::clear_com_ext_storage,
             commands::send_developer_request,
             commands::get_locale,
             commands::set_locale,

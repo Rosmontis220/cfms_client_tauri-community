@@ -1,0 +1,207 @@
+import { invoke } from '@tauri-apps/api/core';
+
+/**
+ * Community plugin (`com_ext`) IPC surface.
+ *
+ * Parallel to `./extensions`, which talks to the official `extension_*`
+ * commands.  The two never share a package format, storage root, state, or
+ * capability set, so both can be used at the same time.
+ */
+
+export type ComExtCapability =
+  | 'files.list'
+  | 'files.metadata.read'
+  | 'files.search'
+  | 'files.open'
+  | 'tasks.read'
+  | 'transfers.download.enqueue'
+  | 'account.summary.read'
+  | 'events.subscribe'
+  | 'ui.notify'
+  | 'ui.confirm'
+  | 'storage.read'
+  | 'storage.write';
+
+/** UI extension points a plugin may contribute to. */
+export type ComExtSlotPoint =
+  | 'navigation'
+  | 'settings-section'
+  | 'page'
+  | 'file-row-trailing'
+  | 'file-row-status'
+  | 'file-toolbar'
+  | 'file-context-menu'
+  | 'overview-section';
+
+/** Flow hooks a plugin may attach to. */
+export type ComExtHookPoint =
+  | 'beforeDocumentOpen'
+  | 'afterDownloadEnqueue'
+  | 'onLogin'
+  | 'onLogout';
+
+/** Core surfaces a plugin may replace wholesale. */
+export type ComExtOverridePoint = 'page' | 'component';
+
+export type ComExtBackgroundTrigger =
+  | { type: 'on_enable'; workflow: string }
+  | { type: 'on_login'; workflow: string }
+  | { type: 'interval'; workflow: string; minutes: number }
+  | { type: 'event'; workflow: string; event: string };
+
+export interface ComExtNavigationEntry {
+  id: string;
+  label: string;
+  icon: string;
+  page: string;
+  order: number;
+}
+
+export interface ComExtPageEntry {
+  id: string;
+  label: string;
+  page: string;
+}
+
+export interface ComExtSlotEntry {
+  id: string;
+  point: ComExtSlotPoint;
+  page: string;
+  order: number;
+}
+
+export interface ComExtActionEntry {
+  id: string;
+  label: string;
+  workflow: string;
+  point: string;
+  tone: string;
+}
+
+export interface ComExtHookEntry {
+  id: string;
+  point: ComExtHookPoint;
+  workflow: string;
+}
+
+export interface ComExtOverrideEntry {
+  id: string;
+  point: ComExtOverridePoint;
+  target: string;
+  page: string;
+}
+
+export interface ComExtEntrypoints {
+  navigation: ComExtNavigationEntry[];
+  settings: ComExtPageEntry[];
+  pages: ComExtPageEntry[];
+  slots: ComExtSlotEntry[];
+  actions: ComExtActionEntry[];
+  hooks: ComExtHookEntry[];
+  overrides: ComExtOverrideEntry[];
+}
+
+export interface ComExtManifest {
+  /** Always `cfmscomext`; this is the format marker. */
+  format: string;
+  schema_version: number;
+  id: string;
+  name: string;
+  description: string;
+  publisher: string;
+  version: string;
+  com_ext_api: string;
+  min_client_version: string;
+  requested_capabilities: ComExtCapability[];
+  entrypoints: ComExtEntrypoints;
+  background_triggers: ComExtBackgroundTrigger[];
+}
+
+export interface ComExtInstallation {
+  manifest: ComExtManifest;
+  package_digest: string;
+  installed_at: number;
+  enabled: boolean;
+  granted_capabilities: ComExtCapability[];
+  disk_bytes: number;
+}
+
+export interface ComExtOverview {
+  installed: ComExtInstallation[];
+  hostApiVersion: string;
+  capabilities: ComExtCapability[];
+  packageExtension: string;
+  root: string;
+}
+
+export interface DeclarativePage {
+  schema_version: number;
+  title: string;
+  description?: string;
+  blocks: DeclarativeBlock[];
+}
+
+export type DeclarativeBlock =
+  | { type: 'text'; text: string; style?: 'body' | 'caption' | 'heading' }
+  | { type: 'status_card'; title: string; value: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }
+  | { type: 'alert'; title?: string; message: string; tone?: 'info' | 'success' | 'warning' | 'danger' }
+  | { type: 'progress'; label: string; value: number; max?: number }
+  | { type: 'list'; title?: string; items: Array<{ title: string; description?: string; value?: string }> }
+  | { type: 'table'; title?: string; columns: Array<{ key: string; label: string }>; rows: Array<Record<string, unknown>> }
+  | { type: 'empty_state'; title: string; description?: string }
+  | { type: 'form'; id: string; fields: Array<{ id: string; label: string; type: 'text' | 'number' | 'toggle' | 'select'; options?: string[]; default?: unknown }> }
+  | { type: 'actions'; actions: Array<{ id: string; label: string; workflow: string; tone?: 'primary' | 'secondary' | 'danger' }> };
+
+export interface DeclarativeWorkflow {
+  schema_version: number;
+  start: string;
+  nodes: Array<Record<string, unknown> & { id: string; type: string }>;
+}
+
+export function getComExtOverview(): Promise<ComExtOverview> {
+  return invoke('get_com_ext_overview');
+}
+
+export function importComExtPackage(path: string): Promise<ComExtInstallation> {
+  return invoke('import_com_ext_package', { path });
+}
+
+export function uninstallComExtPlugin(pluginId: string): Promise<void> {
+  return invoke('uninstall_com_ext_plugin', { pluginId });
+}
+
+export function setComExtEnabled(pluginId: string, enabled: boolean): Promise<void> {
+  return invoke('set_com_ext_enabled', { pluginId, enabled });
+}
+
+export function readComExtPage(pluginId: string, page: string): Promise<DeclarativePage> {
+  return invoke('read_com_ext_page', { pluginId, page });
+}
+
+export function readComExtWorkflow(pluginId: string, workflow: string): Promise<DeclarativeWorkflow> {
+  return invoke('read_com_ext_workflow', { pluginId, workflow });
+}
+
+export function readComExtContribution(
+  pluginId: string,
+  kind: 'slots' | 'hooks',
+  id: string,
+): Promise<DeclarativePage> {
+  return invoke('read_com_ext_contribution', { pluginId, kind, id });
+}
+
+export function getComExtStorage(pluginId: string, key: string): Promise<string | null> {
+  return invoke('get_com_ext_storage', { pluginId, key });
+}
+
+export function setComExtStorage(pluginId: string, key: string, value: string): Promise<void> {
+  return invoke('set_com_ext_storage', { pluginId, key, value });
+}
+
+export function removeComExtStorage(pluginId: string, key: string): Promise<void> {
+  return invoke('remove_com_ext_storage', { pluginId, key });
+}
+
+export function clearComExtStorage(pluginId: string): Promise<void> {
+  return invoke('clear_com_ext_storage', { pluginId });
+}
