@@ -96,7 +96,9 @@
   import ProgressRing from '$lib/components/ProgressRing.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { accessEntrySubject } from '$lib/access-entries';
-  import { runComExtHooks } from '$lib/com-ext-workflow';
+  import { comExtStore } from '$lib/com-ext.svelte';
+  import { runComExtHooks, runComExtWorkflow } from '$lib/com-ext-workflow';
+  import { formatUserFacingError } from '$lib/user-facing-errors';
   import type { AccessGrantFormValue } from '$lib/access-grants';
   import type { AccessRulesRecord } from '$lib/access-rules';
   import type { ContextMenuItem } from '$lib/components/context-menu';
@@ -1221,6 +1223,21 @@
       disabled: batchBusy || !hasPermission('list_deleted_items'),
       run: handleNavigateTrash,
     },
+    // Community plugins may add buttons to the file toolbar. They are appended
+    // after the built-in actions so plugin buttons never displace the client's
+    // own controls, and a disabled plugin contributes nothing.
+    ...comExtStore.actionContributors('file-toolbar').map(({ pluginId, entry }) => ({
+      id: `com-ext:${pluginId}:${entry.id}`,
+      label: entry.label,
+      icon: 'extensions' as const,
+      tone: entry.tone === 'danger' ? ('danger' as const) : ('default' as const),
+      dividerBefore: true,
+      run: () => {
+        void runComExtWorkflow(pluginId, entry.workflow).catch((error) => {
+          notificationStore.error(formatUserFacingError(error));
+        });
+      },
+    })),
   ]);
 
   $effect(() => {

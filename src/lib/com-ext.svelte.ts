@@ -52,6 +52,25 @@ class ComExtStore {
     return installation?.manifest.name ?? pluginId;
   }
 
+  /** Plugins that contribute an action to a given action point. */
+  actionContributors(point: string): Array<{
+    pluginId: string;
+    entry: ComExtInstallation['manifest']['entrypoints']['actions'][number];
+  }> {
+    const contributors: Array<{
+      pluginId: string;
+      entry: ComExtInstallation['manifest']['entrypoints']['actions'][number];
+    }> = [];
+    for (const installation of this.enabledInstallations) {
+      for (const entry of installation.manifest.entrypoints.actions) {
+        if (entry.point === point) {
+          contributors.push({ pluginId: installation.manifest.id, entry });
+        }
+      }
+    }
+    return contributors;
+  }
+
   /** Plugins that attach to a given lifecycle hook point, in declared order. */
   hookContributors(point: string): Array<{ pluginId: string; workflow: string }> {
     const contributors: Array<{ pluginId: string; workflow: string }> = [];

@@ -212,6 +212,61 @@ describe('community plugin slot registry', () => {
   });
 });
 
+describe('community plugin action registry', () => {
+  function withActions(
+    id: string,
+    actions: Array<{ id: string; label: string; workflow: string; point: string; tone: string }>,
+    enabled = true,
+  ) {
+    const entry = installation({ enabled });
+    entry.manifest.id = id;
+    entry.manifest.entrypoints.actions = actions;
+    return entry;
+  }
+
+  it('returns actions contributed to the requested point only', () => {
+    comExtStore.overview = overview([
+      withActions('org.example.toolbar', [
+        { id: 'a', label: 'Scan', workflow: 'scan', point: 'file-toolbar', tone: 'default' },
+        { id: 'b', label: 'Menu', workflow: 'menu', point: 'file-context-menu', tone: 'default' },
+      ]),
+    ]);
+
+    const contributors = comExtStore.actionContributors('file-toolbar');
+
+    expect(contributors.map((entry) => entry.entry.label)).toEqual(['Scan']);
+    expect(contributors[0].pluginId).toBe('org.example.toolbar');
+  });
+
+  it('ignores actions belonging to a disabled plugin', () => {
+    comExtStore.overview = overview([
+      withActions(
+        'org.example.off',
+        [{ id: 'a', label: 'Scan', workflow: 'scan', point: 'file-toolbar', tone: 'default' }],
+        false,
+      ),
+    ]);
+
+    expect(comExtStore.actionContributors('file-toolbar')).toEqual([]);
+  });
+
+  it('collects actions from every enabled plugin', () => {
+    comExtStore.overview = overview([
+      withActions('org.example.a', [
+        { id: 'a', label: 'Alpha', workflow: 'a', point: 'file-toolbar', tone: 'default' },
+      ]),
+      withActions('org.example.b', [
+        { id: 'b', label: 'Beta', workflow: 'b', point: 'file-toolbar', tone: 'default' },
+      ]),
+    ]);
+
+    expect(comExtStore.actionContributors('file-toolbar').map((e) => e.pluginId)).toEqual([
+      'org.example.a',
+      'org.example.b',
+    ]);
+  });
+});
+
 describe('community plugin store refresh', () => {
   it('records a failed refresh instead of throwing', async () => {
     mocks.getComExtOverview.mockRejectedValue(new Error('backend offline'));
