@@ -540,6 +540,150 @@ mod tests {
         assert!(error.contains("Unknown slot point"), "got: {error}");
     }
 
+    /// The refusal must name what the host *does* render, so a plugin author
+    /// learns where their contribution can go instead of only that it failed.
+    #[test]
+    fn unknown_slot_point_lists_the_supported_points() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "slots": [{"id":"x","point":"file-row-trailing","page":"home"}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("overview-section"), "got: {error}");
+        assert!(error.contains("settings-section"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_unknown_action_point() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "actions": [{"id":"x","label":"X","workflow":"w","point":"no-such-surface"}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+            (
+                "workflows/w.json",
+                br#"{"schema_version":1,"steps":[{"type":"result"}]}"#,
+            ),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("Unknown action point"), "got: {error}");
+        assert!(error.contains("file-toolbar"), "got: {error}");
+    }
+
+    /// A slot renders a document and an action runs a workflow, so the two
+    /// vocabularies must not overlap: a toolbar action is not a valid slot.
+    #[test]
+    fn rejects_an_action_point_used_as_a_slot() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "slots": [{"id":"x","point":"file-toolbar","page":"home"}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("Unknown slot point"), "got: {error}");
+    }
+
+    /// Not implemented yet, so accepted-and-ignored is the wrong answer: a
+    /// plugin must not install believing a schedule it will never get.
+    #[test]
+    fn refuses_background_triggers_that_the_host_cannot_run() {
+        let manifest = manifest_json("org.example.test", "").replace(
+            r#""background_triggers": []"#,
+            r#""background_triggers": [{"type":"interval","workflow":"w","minutes":30}]"#,
+        );
+        let package = build(&[
+            ("com_ext.json", manifest.as_bytes()),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+            (
+                "workflows/w.json",
+                br#"{"schema_version":1,"steps":[{"type":"result"}]}"#,
+            ),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("Background triggers"), "got: {error}");
+        assert!(error.contains("onLogin"), "got: {error}");
+    }
+
+    #[test]
+    fn refuses_override_contributions() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "overrides": [{"id":"x","point":"page","target":"/home/chat","page":"home"}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("Override"), "got: {error}");
+    }
+
+    /// A mistyped key used to be dropped by serde, so the plugin installed with
+    /// the contribution missing and no hint as to why.
+    #[test]
+    fn rejects_an_unknown_manifest_field() {
+        let manifest = manifest_json("org.example.test", "")
+            .replace(r#""publisher": "tests","#, r#""publisher": "tests", "publiser": "typo","#);
+        let package = build(&[
+            ("com_ext.json", manifest.as_bytes()),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("publiser"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_an_unknown_entrypoint_list() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "slot": [{"id":"x","point":"overview-section","page":"home"}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("must be rejected");
+
+        assert!(error.contains("slot"), "got: {error}");
+    }
+
     #[test]
     fn rejects_an_empty_archive() {
         let error = validate_package(&[]).expect_err("must be rejected");

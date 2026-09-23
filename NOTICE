@@ -23,9 +23,15 @@ Added:
 
   * The `com_ext` community plugin interface, comprising
     `crates/service/src/com_ext/`, `src-tauri/src/commands/com_ext.rs`,
-    `src/lib/api/com-ext.ts`, `src/lib/com-ext.svelte.ts`, and the
-    `/home/settings/com-ext` route. This code is new and is not derived from
+    `src/lib/api/com-ext.ts`, `src/lib/com-ext.svelte.ts`,
+    `src/lib/com-ext-workflow.ts`, `src/lib/components/ComExtPageRenderer.svelte`,
+    `src/lib/components/ComExtSlot.svelte`, and the `/home/com-ext/view` and
+    `/home/settings/com-ext` routes. This code is new and is not derived from
     the upstream extension implementation.
+  * `src/lib/declarative-workflow.ts`, `src/lib/declarative-page.ts`, and
+    `src/lib/components/DeclarativePageRenderer.svelte` — the workflow engine and
+    page renderer extracted from the two upstream files named below, so that the
+    official and community interfaces share one implementation.
 
 Modified:
 
@@ -37,16 +43,21 @@ Modified:
     `src/lib/settings-entries.ts`, `src/lib/navigation.ts`,
     `src/routes/home/+layout.svelte`, and the locale message catalogues —
     additive wiring for the interface above.
+  * `src/routes/home/overview/+page.svelte`, `src/routes/home/settings/+page.svelte`,
+    and `src/routes/home/files/+page.svelte` — each gained a mount point for
+    plugin contributions: the overview and settings pages render a plugin panel,
+    and the file browser renders plugin toolbar buttons, context-menu entries,
+    and fires the document-open and download-enqueued hooks. All existing
+    behaviour is preserved; every mount point renders nothing when no plugin
+    contributes to it.
   * `src/lib/extension-workflows.ts` and
     `src/lib/components/ExtensionPageRenderer.svelte` — the declarative workflow
-    engine and the page renderer were extracted into `src/lib/declarative-workflow.ts`,
-    `src/lib/declarative-page.ts`, and
-    `src/lib/components/DeclarativePageRenderer.svelte`, which the official and
-    community interfaces now share. Both upstream files keep their existing
-    public API and behaviour and are now thin adapters over the shared
-    implementation. Extracting them was preferred to duplicating roughly two
-    hundred lines of interpreter logic that would otherwise drift between the
-    two interfaces.
+    engine and the page renderer were extracted into the three new files listed
+    above, which the official and community interfaces now share. Both upstream
+    files keep their existing public API and behaviour and are now thin adapters
+    over the shared implementation. Extracting them was preferred to duplicating
+    roughly two hundred lines of interpreter logic that would otherwise drift
+    between the two interfaces.
   * Version metadata and `src/lib/changelog/CHANGELOG.md` were reset to this
     edition's own `1.0.0` release.
 

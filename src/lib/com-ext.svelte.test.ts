@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { comExtStore } from '$lib/com-ext.svelte';
-import type { ComExtInstallation, ComExtOverview } from '$lib/api/com-ext';
+import type { ComExtActionPoint, ComExtInstallation, ComExtOverview } from '$lib/api/com-ext';
 
 const mocks = vi.hoisted(() => ({
   executeComExtHostCall: vi.fn(),
@@ -141,7 +141,7 @@ describe('community plugin slot registry', () => {
           id: 'org.example.enabled',
           entrypoints: {
             ...installation().manifest.entrypoints,
-            slots: [{ id: 'a', point: 'file-row-trailing', page: 'row', order: 1 }],
+            slots: [{ id: 'a', point: 'overview-section', page: 'row', order: 1 }],
           },
         },
       }),
@@ -152,13 +152,13 @@ describe('community plugin slot registry', () => {
           id: 'org.example.disabled',
           entrypoints: {
             ...installation().manifest.entrypoints,
-            slots: [{ id: 'b', point: 'file-row-trailing', page: 'row', order: 0 }],
+            slots: [{ id: 'b', point: 'overview-section', page: 'row', order: 0 }],
           },
         },
       }),
     ]);
 
-    const contributors = comExtStore.slotContributors('file-row-trailing');
+    const contributors = comExtStore.slotContributors('overview-section');
 
     expect(contributors.map((entry) => entry.pluginId)).toEqual(['org.example.enabled']);
   });
@@ -171,7 +171,7 @@ describe('community plugin slot registry', () => {
           id: 'org.example.late',
           entrypoints: {
             ...installation().manifest.entrypoints,
-            slots: [{ id: 'late', point: 'file-toolbar', page: 'late', order: 20 }],
+            slots: [{ id: 'late', point: 'settings-section', page: 'late', order: 20 }],
           },
         },
       }),
@@ -181,13 +181,13 @@ describe('community plugin slot registry', () => {
           id: 'org.example.early',
           entrypoints: {
             ...installation().manifest.entrypoints,
-            slots: [{ id: 'early', point: 'file-toolbar', page: 'early', order: 5 }],
+            slots: [{ id: 'early', point: 'settings-section', page: 'early', order: 5 }],
           },
         },
       }),
     ]);
 
-    const contributors = comExtStore.slotContributors('file-toolbar');
+    const contributors = comExtStore.slotContributors('settings-section');
 
     expect(contributors.map((entry) => entry.pluginId)).toEqual([
       'org.example.early',
@@ -202,20 +202,49 @@ describe('community plugin slot registry', () => {
           ...installation().manifest,
           entrypoints: {
             ...installation().manifest.entrypoints,
-            slots: [{ id: 'nav', point: 'navigation', page: 'nav', order: 1 }],
+            slots: [{ id: 'settings', point: 'settings-section', page: 'settings', order: 1 }],
           },
         },
       }),
     ]);
 
-    expect(comExtStore.slotContributors('file-row-trailing')).toEqual([]);
+    expect(comExtStore.slotContributors('overview-section')).toEqual([]);
+  });
+
+  it('keeps action points out of the slot vocabulary', () => {
+    // A slot renders a page document; an action runs a workflow. They were once
+    // one list, which let a plugin declare a contribution the host would never
+    // render. A toolbar action must therefore not be reachable as a slot.
+    comExtStore.overview = overview([
+      installation({
+        manifest: {
+          ...installation().manifest,
+          entrypoints: {
+            ...installation().manifest.entrypoints,
+            actions: [
+              { id: 'scan', label: 'Scan', workflow: 'scan', point: 'file-toolbar' as const, tone: '' },
+            ],
+          },
+        },
+      }),
+    ]);
+
+    expect(comExtStore.actionContributors('file-toolbar')).toHaveLength(1);
+    expect(comExtStore.slotContributors('overview-section')).toEqual([]);
+    expect(comExtStore.slotContributors('settings-section')).toEqual([]);
   });
 });
 
 describe('community plugin action registry', () => {
   function withActions(
     id: string,
-    actions: Array<{ id: string; label: string; workflow: string; point: string; tone: string }>,
+    actions: Array<{
+      id: string;
+      label: string;
+      workflow: string;
+      point: ComExtActionPoint;
+      tone: string;
+    }>,
     enabled = true,
   ) {
     const entry = installation({ enabled });

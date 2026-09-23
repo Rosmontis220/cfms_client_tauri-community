@@ -12,6 +12,7 @@
   import { authStore, serverStateStore } from '$lib/stores.svelte';
   import { getVisibleSettingsGroups } from '$lib/settings-entries';
   import Icon from '$lib/components/Icon.svelte';
+  import ComExtSlot from '$lib/components/ComExtSlot.svelte';
   import type { IconName } from '$lib/icons';
 
   type ProtectionState = 'loading' | 'enabled' | 'attention' | 'unavailable';
@@ -227,6 +228,10 @@
       </section>
     {/each}
   </div>
+
+  <!-- Community plugins may contribute a section here. Renders nothing when no
+       plugin does, so the page is unchanged for a user with no plugins. -->
+  <ComExtSlot point="settings-section" />
 </div>
 
 <style>

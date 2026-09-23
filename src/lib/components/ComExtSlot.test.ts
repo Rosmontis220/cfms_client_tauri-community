@@ -126,7 +126,7 @@ describe('community plugin slot', () => {
   it('ignores contributions aimed at a different point', () => {
     comExtStore.overview = overview([
       installation('org.example.a', 'Alpha Plugin', [
-        { id: 'row', point: 'file-row-trailing', page: 'row', order: 1 },
+        { id: 'settings', point: 'settings-section', page: 'settings', order: 1 },
       ]),
     ]);
 

@@ -32,16 +32,25 @@ export type ComExtCapability =
   | 'storage.read'
   | 'storage.write';
 
-/** UI extension points a plugin may contribute to. */
-export type ComExtSlotPoint =
-  | 'navigation'
-  | 'settings-section'
-  | 'page'
-  | 'file-row-trailing'
-  | 'file-row-status'
-  | 'file-toolbar'
-  | 'file-context-menu'
-  | 'overview-section';
+/**
+ * Regions a plugin may render one of its page documents into.
+ *
+ * A slot contribution is a page document the host embeds in one of its own
+ * screens, so these points name *where the document appears*. Points that name
+ * a command rather than a region belong to `ComExtActionPoint` instead.
+ */
+export type ComExtSlotPoint = 'overview-section' | 'settings-section';
+
+/**
+ * Host surfaces a plugin may add a command to.
+ *
+ * An action contribution names a workflow rather than a document, so it runs
+ * when the user picks it instead of rendering anywhere. Per-row surfaces are
+ * absent for the reason the backend documents: a declarative workflow cannot
+ * produce one value per visible file without an IPC round trip per row, so the
+ * host rejects them at install time instead of ignoring them.
+ */
+export type ComExtActionPoint = 'file-toolbar' | 'file-context-menu';
 
 /** Flow hooks a plugin may attach to. */
 export type ComExtHookPoint =
@@ -84,7 +93,7 @@ export interface ComExtActionEntry {
   id: string;
   label: string;
   workflow: string;
-  point: string;
+  point: ComExtActionPoint;
   tone: string;
 }
 

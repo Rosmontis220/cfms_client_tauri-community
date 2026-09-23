@@ -28,6 +28,11 @@ CFMS Client project.
 - **A capability-based permission model.** A plugin can only reach host APIs it
   declared in its manifest and that you approved when you enabled it. Opening or
   downloading a file always asks for confirmation first.
+- **Install-time manifest validation.** A package is refused, with a message
+  naming what this host does support, when it declares a contribution the host
+  cannot render, a background trigger it cannot run, or a field it does not
+  recognise. A plugin that would install and then silently do nothing is an
+  error instead of a surprise.
 
 ### Improved
 - The in-app updater now reads this edition's own releases. Left pointing at the

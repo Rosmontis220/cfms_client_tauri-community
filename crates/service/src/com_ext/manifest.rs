@@ -12,16 +12,34 @@ use super::{
     COM_EXT_API_VERSION, COM_EXT_CAPABILITIES, COM_EXT_FORMAT,
 };
 
-/// UI extension points a package may contribute to.
+/// Regions a package may render one of its page documents into.
+///
+/// A slot contribution is a page document the host embeds in one of its own
+/// screens, so these points name *where the document appears*. Points that name
+/// a command rather than a region — a toolbar button, a context-menu entry, a
+/// file row — belong to [`COM_EXT_ACTION_POINTS`] instead.
+///
+/// Sidebar entries and standalone pages are deliberately absent: they carry a
+/// label and an order the host needs, so they have their own entrypoint lists.
 pub const COM_EXT_SLOT_POINTS: &[&str] = &[
-    "navigation",
+    "overview-section",
     "settings-section",
-    "page",
-    "file-row-trailing",
-    "file-row-status",
+];
+
+/// Host surfaces a package may add a command to.
+///
+/// An action contribution names a workflow rather than a document, so it runs
+/// when the user picks it instead of rendering anywhere.
+///
+/// Per-row surfaces are deliberately absent. A row contribution needs one value
+/// per visible file, and a declarative workflow cannot compute that: the
+/// expression vocabulary has no way to map over a listing, and asking the host
+/// once per row would put an IPC round trip on every row of a virtualised
+/// table. Both points therefore fail validation here rather than being accepted
+/// and then silently ignored.
+pub const COM_EXT_ACTION_POINTS: &[&str] = &[
     "file-toolbar",
     "file-context-menu",
-    "overview-section",
 ];
 
 /// Flow hooks a package may attach to.
@@ -35,12 +53,6 @@ pub const COM_EXT_HOOK_POINTS: &[&str] = &[
     "onLogout",
 ];
 
-/// Core surfaces a package may override wholesale.
-///
-/// Overrides replace a host page or component rather than adding to it, so they
-/// are the most invasive contribution the interface offers.
-pub const COM_EXT_OVERRIDE_POINTS: &[&str] = &["page", "component"];
-
 /// Longest accepted plugin identifier.
 const MAX_ID_LEN: usize = 128;
 /// Longest accepted entrypoint identifier.
@@ -49,11 +61,9 @@ const MAX_ENTRY_ID_LEN: usize = 64;
 const MAX_NAME_LEN: usize = 64;
 /// Longest accepted description.
 const MAX_DESCRIPTION_LEN: usize = 512;
-/// Bounds on a periodic background trigger.
-const MIN_INTERVAL_MINUTES: u32 = 1;
-const MAX_INTERVAL_MINUTES: u32 = 24 * 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtManifest {
     /// Must be [`COM_EXT_FORMAT`].
     pub format: String,
@@ -77,11 +87,14 @@ pub struct ComExtManifest {
     pub requested_capabilities: Vec<String>,
     #[serde(default)]
     pub entrypoints: ComExtEntrypoints,
+    /// Scheduled and event-driven workflows. Not honoured yet: a non-empty
+    /// list is rejected rather than accepted and ignored.
     #[serde(default)]
     pub background_triggers: Vec<ComExtBackgroundTrigger>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtEntrypoints {
     /// Entries added to the app's main navigation.
     #[serde(default)]
@@ -101,12 +114,14 @@ pub struct ComExtEntrypoints {
     /// Flow hooks.
     #[serde(default)]
     pub hooks: Vec<ComExtHookEntry>,
-    /// Wholesale replacements of host surfaces.
+    /// Wholesale replacements of host surfaces. Not honoured yet: a non-empty
+    /// list is rejected rather than accepted and ignored.
     #[serde(default)]
     pub overrides: Vec<ComExtOverrideEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtNavigationEntry {
     pub id: String,
     pub label: String,
@@ -120,6 +135,7 @@ pub struct ComExtNavigationEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtPageEntry {
     pub id: String,
     pub label: String,
@@ -128,6 +144,7 @@ pub struct ComExtPageEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtSlotEntry {
     pub id: String,
     /// One of [`COM_EXT_SLOT_POINTS`].
@@ -140,19 +157,20 @@ pub struct ComExtSlotEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtActionEntry {
     pub id: String,
     pub label: String,
     /// Workflow id inside this package.
     pub workflow: String,
-    /// Slot the action appears in; one of [`COM_EXT_SLOT_POINTS`].
-    #[serde(default)]
+    /// Surface the action appears on; one of [`COM_EXT_ACTION_POINTS`].
     pub point: String,
     #[serde(default)]
     pub tone: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtHookEntry {
     pub id: String,
     /// One of [`COM_EXT_HOOK_POINTS`].
@@ -161,10 +179,16 @@ pub struct ComExtHookEntry {
     pub workflow: String,
 }
 
+/// A wholesale replacement of a host surface.
+///
+/// The shape is reserved but not honoured: [`validate_entrypoints`] refuses a
+/// non-empty override list, so a package that declares one fails to install
+/// rather than installing and doing nothing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ComExtOverrideEntry {
     pub id: String,
-    /// One of [`COM_EXT_OVERRIDE_POINTS`].
+    /// Surface kind, e.g. `page` or `component`.
     pub point: String,
     /// Host surface being replaced, e.g. `/home/chat`.
     pub target: String,
@@ -173,6 +197,7 @@ pub struct ComExtOverrideEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ComExtBackgroundTrigger {
     /// Runs once when the plugin is enabled.
@@ -327,7 +352,11 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
         validate_entry_id(&entry.id)?;
         validate_entry_id(&entry.page)?;
         if !COM_EXT_SLOT_POINTS.contains(&entry.point.as_str()) {
-            return Err(format!("Unknown slot point \"{}\"", entry.point));
+            return Err(format!(
+                "Unknown slot point \"{}\"; this host renders {}",
+                entry.point,
+                COM_EXT_SLOT_POINTS.join(", ")
+            ));
         }
         if !ids.insert(entry.id.as_str()) {
             return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
@@ -337,8 +366,12 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
         validate_entry_id(&entry.id)?;
         validate_display_string(&entry.label, "action label", MAX_NAME_LEN)?;
         validate_entry_id(&entry.workflow)?;
-        if !entry.point.is_empty() && !COM_EXT_SLOT_POINTS.contains(&entry.point.as_str()) {
-            return Err(format!("Unknown action point \"{}\"", entry.point));
+        if !COM_EXT_ACTION_POINTS.contains(&entry.point.as_str()) {
+            return Err(format!(
+                "Unknown action point \"{}\"; this host renders {}",
+                entry.point,
+                COM_EXT_ACTION_POINTS.join(", ")
+            ));
         }
         if !ids.insert(entry.id.as_str()) {
             return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
@@ -354,41 +387,35 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
             return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
         }
     }
-    for entry in &entrypoints.overrides {
-        validate_entry_id(&entry.id)?;
-        validate_entry_id(&entry.page)?;
-        if !COM_EXT_OVERRIDE_POINTS.contains(&entry.point.as_str()) {
-            return Err(format!("Unknown override point \"{}\"", entry.point));
-        }
-        if entry.target.is_empty() || entry.target.len() > 128 {
-            return Err(format!("Invalid override target \"{}\"", entry.target));
-        }
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+    // Overrides replace a host surface rather than adding to it, and the host
+    // has no seam for that yet. A declared override would silently do nothing,
+    // so it is refused instead.
+    if !entrypoints.overrides.is_empty() {
+        return Err(format!(
+            "Override contributions are not supported by this host version yet; found {}",
+            entrypoints.overrides.len()
+        ));
     }
 
     Ok(())
 }
 
+/// Refuse background triggers.
+///
+/// The host can describe a trigger but never runs one: there is no scheduler
+/// and no host event bus behind them. Accepting them would leave a plugin doing
+/// nothing on a schedule its author believed in, so they are refused outright
+/// until that machinery exists. `onLogin` and `onLogout` are the hooks that do
+/// run today.
 fn validate_triggers(triggers: &[ComExtBackgroundTrigger]) -> Result<(), String> {
-    for trigger in triggers {
-        validate_entry_id(trigger.workflow())?;
-        if let ComExtBackgroundTrigger::Interval { minutes, .. } = trigger {
-            if *minutes < MIN_INTERVAL_MINUTES || *minutes > MAX_INTERVAL_MINUTES {
-                return Err(format!(
-                    "Interval trigger must be between {MIN_INTERVAL_MINUTES} and \
-                     {MAX_INTERVAL_MINUTES} minutes, found {minutes}"
-                ));
-            }
-        }
-        if let ComExtBackgroundTrigger::Event { event, .. } = trigger {
-            if event.is_empty() || event.len() > 64 {
-                return Err(format!("Invalid event name \"{event}\""));
-            }
-        }
+    if triggers.is_empty() {
+        return Ok(());
     }
-    Ok(())
+    Err(format!(
+        "Background triggers are not supported by this host version yet; found {}. \
+         Use the onLogin and onLogout hooks instead.",
+        triggers.len()
+    ))
 }
 
 fn validate_display_string(value: &str, label: &str, max: usize) -> Result<(), String> {

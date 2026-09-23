@@ -469,7 +469,9 @@
       .filter((segment) => segment.path !== ROOT_DIRECTORY_ID)
       .map((segment) => ({ label: segment.label, id: segment.path })),
   );
-  const contextMenuItems = $derived.by<ContextMenuItem[]>(() => getContextMenuItems());
+  const contextMenuItems = $derived.by<ContextMenuItem[]>(() =>
+    withComExtContextMenu(getContextMenuItems()),
+  );
   const revisionRows = $derived(
     revisionsDialog ? buildRevisionRows(revisionsDialog.entries) : [],
   );
@@ -1521,6 +1523,45 @@
     return navHistory[navHistory.length - 1]?.label
       ?? navigationRootLabel
       ?? $t('files.rootDirectory');
+  }
+
+  /**
+   * Append community plugin actions to a file context menu.
+   *
+   * Appended here rather than inside each branch of `getContextMenuItems`, so
+   * there is one place that knows about plugin contributions. Only the file and
+   * folder menus receive them: the selection and blank-area menus describe
+   * different targets, and a plugin that declared `file-context-menu` asked for
+   * a file. Plugin items always come last, after the client's own actions.
+   */
+  function withComExtContextMenu(items: ContextMenuItem[]): ContextMenuItem[] {
+    const kind = contextMenu.kind;
+    const target = contextMenu.item;
+    if ((kind !== 'document' && kind !== 'folder') || !target) return items;
+
+    const contributors = comExtStore.actionContributors('file-context-menu');
+    if (contributors.length === 0) return items;
+
+    const input =
+      kind === 'document'
+        ? { documentId: target.id, filename: (target as ServerDocumentEntry).title }
+        : { folderId: target.id, folderName: (target as ServerDirectoryEntry).name };
+
+    return [
+      ...items,
+      { type: 'divider' },
+      ...contributors.map(({ pluginId, entry }) => ({
+        id: `com-ext:${pluginId}:${entry.id}`,
+        label: entry.label,
+        icon: 'extensions' as const,
+        danger: entry.tone === 'danger',
+        onSelect: () => {
+          void runComExtWorkflow(pluginId, entry.workflow, { input }).catch((error) => {
+            notificationStore.error(formatUserFacingError(error));
+          });
+        },
+      })),
+    ];
   }
 
   function getContextMenuItems(): ContextMenuItem[] {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import ComExtPageRenderer from '$lib/components/ComExtPageRenderer.svelte';
+  import type { ComExtSlotPoint } from '$lib/api/com-ext';
   import { comExtStore } from '$lib/com-ext.svelte';
   import { COMMUNITY_EXT_ENABLED } from '$lib/feature-flags';
 
@@ -12,7 +13,7 @@
    * both of which `slotContributors` decides, so this component stays a thin
    * view over the registry.
    */
-  let { point, heading }: { point: string; heading?: string } = $props();
+  let { point, heading }: { point: ComExtSlotPoint; heading?: string } = $props();
 
   const contributions = $derived(
     COMMUNITY_EXT_ENABLED ? comExtStore.slotContributors(point) : [],

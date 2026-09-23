@@ -1,4 +1,4 @@
-import { readComExtWorkflow, type ComExtCapability } from '$lib/api/com-ext';
+import { readComExtWorkflow, type ComExtCapability, type ComExtHookPoint } from '$lib/api/com-ext';
 import { COM_EXT_SIDE_EFFECTING_CAPABILITIES, comExtStore } from '$lib/com-ext.svelte';
 import {
   runDeclarativeWorkflow,
@@ -56,7 +56,7 @@ export async function runComExtWorkflow(
  * asked for.
  */
 export async function runComExtHooks(
-  point: string,
+  point: ComExtHookPoint,
   input: Record<string, unknown> = {},
 ): Promise<void> {
   for (const contributor of comExtStore.hookContributors(point)) {

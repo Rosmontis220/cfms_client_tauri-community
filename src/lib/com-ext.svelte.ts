@@ -4,9 +4,12 @@ import {
   importComExtPackage,
   setComExtEnabled,
   uninstallComExtPlugin,
+  type ComExtActionPoint,
   type ComExtCapability,
+  type ComExtHookPoint,
   type ComExtInstallation,
   type ComExtOverview,
+  type ComExtSlotPoint,
 } from '$lib/api/com-ext';
 
 /**
@@ -53,7 +56,7 @@ class ComExtStore {
   }
 
   /** Plugins that contribute an action to a given action point. */
-  actionContributors(point: string): Array<{
+  actionContributors(point: ComExtActionPoint): Array<{
     pluginId: string;
     entry: ComExtInstallation['manifest']['entrypoints']['actions'][number];
   }> {
@@ -72,7 +75,7 @@ class ComExtStore {
   }
 
   /** Plugins that attach to a given lifecycle hook point, in declared order. */
-  hookContributors(point: string): Array<{ pluginId: string; workflow: string }> {
+  hookContributors(point: ComExtHookPoint): Array<{ pluginId: string; workflow: string }> {
     const contributors: Array<{ pluginId: string; workflow: string }> = [];
     for (const installation of this.enabledInstallations) {
       for (const entry of installation.manifest.entrypoints.hooks) {
@@ -85,7 +88,7 @@ class ComExtStore {
   }
 
   /** Plugins that contribute to a given UI slot point, in declared order. */
-  slotContributors(point: string): Array<{ pluginId: string; entry: ComExtInstallation['manifest']['entrypoints']['slots'][number] }> {
+  slotContributors(point: ComExtSlotPoint): Array<{ pluginId: string; entry: ComExtInstallation['manifest']['entrypoints']['slots'][number] }> {
     const contributors: Array<{ pluginId: string; entry: ComExtInstallation['manifest']['entrypoints']['slots'][number] }> = [];
     for (const installation of this.enabledInstallations) {
       for (const entry of installation.manifest.entrypoints.slots) {
