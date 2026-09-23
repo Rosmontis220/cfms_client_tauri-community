@@ -1586,6 +1586,7 @@ export const en = {
       noneInstalled: 'No community plugins installed',
       noneInstalledHint: 'Import a .cfmscomext file to get started.',
       installComplete: 'Plugin installed. Enable it to activate it.',
+      installCompleteEnabled: 'Plugin installed and enabled.',
       installFailed: 'Plugin installation failed',
       uninstall: 'Uninstall',
       uninstallConfirm: 'Uninstall {name} from this device? Its private data is removed too.',

@@ -51,7 +51,7 @@ pub use manifest::{
     ComExtManifest, ComExtNavigationEntry, ComExtOverrideEntry, ComExtPageEntry, ComExtSlotEntry,
 };
 pub use package::ValidatedComExtPackage;
-pub use store::{ComExtInstallation, ComExtStore};
+pub use store::{ComExtInstallation, ComExtPageSource, ComExtStore};
 
 /// Version of the host API this build implements.
 ///

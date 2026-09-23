@@ -49,7 +49,19 @@
     busy = 'import';
     try {
       const installed = await comExtStore.importPackage(selected);
-      notificationStore.success($t('settings.comExt.installComplete', { values: { name: installed.manifest.name } }));
+      // A plugin that asks for nothing has nothing to be gated on, so making
+      // the user take a second step to enable it would be ceremony. One that
+      // asks for capabilities still waits for an explicit decision.
+      if (installed.manifest.requested_capabilities.length === 0) {
+        await comExtStore.changeEnabled(installed.manifest.id, true);
+        notificationStore.success(
+          $t('settings.comExt.installCompleteEnabled', { values: { name: installed.manifest.name } }),
+        );
+      } else {
+        notificationStore.success(
+          $t('settings.comExt.installComplete', { values: { name: installed.manifest.name } }),
+        );
+      }
     } catch (error) {
       notificationStore.error(`${$t('settings.comExt.installFailed')}: ${formatError(error)}`);
     } finally {

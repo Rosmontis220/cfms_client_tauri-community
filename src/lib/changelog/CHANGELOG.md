@@ -33,6 +33,18 @@ CFMS Client project.
   cannot render, a background trigger it cannot run, or a field it does not
   recognise. A plugin that would install and then silently do nothing is an
   error instead of a surprise.
+- **Plugins can bring their own code.** A plugin page is one self-contained HTML
+  file, mounted in isolation so it cannot restyle the app and the app cannot
+  restyle it. Real tools need this: the declarative vocabulary has no way to
+  express a cipher, a hash, or a character-encoding conversion.
+- **A packaging tool.** `pnpm plugin:pack` turns a plugin directory into a
+  `.cfmscomext`, and `pnpm plugin:build` runs a plugin's own build step first.
+  A plugin that requests no capabilities is enabled as it installs, so adding
+  one is a single step and removing it is a single click.
+- **小工具, the first community plugin**, ships in this repository as a worked
+  example: fourteen cipher and encoding tools plus the server-key matrix panel,
+  carried over from the reference implementation and checked against its
+  recorded outputs.
 
 ### Improved
 - The in-app updater now reads this edition's own releases. Left pointing at the
@@ -42,10 +54,13 @@ CFMS Client project.
 ### Notes
 - The official signed extension interface is unchanged and still available
   alongside the community one. The two share no state.
-- Community plugins are not signature-verified. Only install packages whose
-  source you trust.
+- Community plugins are not signature-verified, and a plugin page runs with the
+  same privileges as the app itself — the webview is configured to allow that.
+  This is a deliberate trade for a private group: a plugin that cannot run code
+  cannot do anything a plugin is for. Install only packages whose source you
+  trust.
 
---- 
+---
 
 ## v0.51.1
 **Released on:** 2026-09-11

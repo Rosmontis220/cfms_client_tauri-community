@@ -25,13 +25,16 @@ Added:
     `crates/service/src/com_ext/`, `src-tauri/src/commands/com_ext.rs`,
     `src/lib/api/com-ext.ts`, `src/lib/com-ext.svelte.ts`,
     `src/lib/com-ext-workflow.ts`, `src/lib/components/ComExtPageRenderer.svelte`,
-    `src/lib/components/ComExtSlot.svelte`, and the `/home/com-ext/view` and
-    `/home/settings/com-ext` routes. This code is new and is not derived from
-    the upstream extension implementation.
+    `src/lib/components/ComExtAppFrame.svelte`, `src/lib/components/ComExtSlot.svelte`,
+    and the `/home/com-ext/view` and `/home/settings/com-ext` routes. This code
+    is new and is not derived from the upstream extension implementation.
   * `src/lib/declarative-workflow.ts`, `src/lib/declarative-page.ts`, and
     `src/lib/components/DeclarativePageRenderer.svelte` — the workflow engine and
     page renderer extracted from the two upstream files named below, so that the
     official and community interfaces share one implementation.
+  * `scripts/pack-com-ext.mjs` and `scripts/build-com-ext.mjs`, `plugins/tools/`,
+    and `docs/community-plugins.md` — a packaging tool, the first community
+    plugin, and its authoring guide.
 
 Modified:
 
@@ -39,6 +42,11 @@ Modified:
     at this repository instead of the upstream one. Left unchanged, an update
     would replace the installed binary with an official build and silently
     discard the community plugin interface.
+  * `src-tauri/tauri.conf.json` — the content security policy allows `eval` in
+    `script-src`, which is how a community plugin page runs the code it ships.
+    Without it a plugin could only render declarative documents and could not
+    compute anything. This widens what injected markup can do, and it is a
+    deliberate trade for an interface intended for a private group.
   * `src-tauri/src/lib.rs`, `src/lib/feature-flags.ts`,
     `src/lib/settings-entries.ts`, `src/lib/navigation.ts`,
     `src/routes/home/+layout.svelte`, and the locale message catalogues —
@@ -50,6 +58,9 @@ Modified:
     and fires the document-open and download-enqueued hooks. All existing
     behaviour is preserved; every mount point renders nothing when no plugin
     contributes to it.
+  * `src/routes/home/settings/com-ext/+page.svelte` — a plugin that requests no
+    capabilities is enabled as it is installed, so adding one is a single step.
+  * `package.json` — devDependencies and scripts for building plugin packages.
   * `src/lib/extension-workflows.ts` and
     `src/lib/components/ExtensionPageRenderer.svelte` — the declarative workflow
     engine and the page renderer were extracted into the three new files listed

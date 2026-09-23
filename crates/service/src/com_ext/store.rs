@@ -27,6 +27,22 @@ use super::{COM_EXT_MANIFEST_FILENAME, MAX_STORAGE_TOTAL_BYTES, MAX_STORAGE_VALU
 /// Settings key holding the whole community plugin state blob.
 const STATE_KEY: &str = "com_ext.state";
 
+/// A page as it is stored in a package.
+///
+/// The two variants are the two ways a plugin can describe a page. A
+/// self-contained HTML application can compute anything the webview can, which
+/// is what a real tool needs; a declarative document is rendered by the host
+/// from a fixed block vocabulary, which is enough for a status panel and needs
+/// no code. A plugin picks one per page id.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ComExtPageSource {
+    /// Self-contained HTML; the host mounts it and runs its scripts.
+    Html { html: String },
+    /// Declarative document rendered by the host's block renderer.
+    Declarative { document: serde_json::Value },
+}
+
 /// A plugin as the UI sees it.
 #[derive(Debug, Clone, Serialize)]
 pub struct ComExtInstallation {
@@ -348,9 +364,30 @@ impl ComExtStore {
 
     // -- document access -----------------------------------------------------
 
-    /// Read a page document from an enabled plugin.
-    pub fn read_page(&self, plugin_id: &str, page: &str) -> Result<serde_json::Value, String> {
-        self.read_document(plugin_id, &format!("pages/{page}.json"))
+    /// Read a page from an enabled plugin.
+    ///
+    /// A page id resolves to `pages/{page}.html`, a self-contained application
+    /// the host runs as-is, or to `pages/{page}.json`, a declarative document
+    /// the host renders from blocks. Package validation guarantees exactly one
+    /// of the two is present, so the first match here is the only match.
+    pub fn read_page(&self, plugin_id: &str, page: &str) -> Result<ComExtPageSource, String> {
+        super::manifest::validate_entry_id(page)?;
+        let files = self.verified_files(plugin_id)?;
+
+        let html_path = format!("pages/{page}.html");
+        if let Some(bytes) = files.get(&html_path) {
+            let html = String::from_utf8(bytes.clone())
+                .map_err(|_| format!("Plugin page \"{html_path}\" is not valid UTF-8"))?;
+            return Ok(ComExtPageSource::Html { html });
+        }
+
+        let json_path = format!("pages/{page}.json");
+        let bytes = files
+            .get(&json_path)
+            .ok_or_else(|| format!("Plugin \"{plugin_id}\" has no page \"{page}\""))?;
+        let document = serde_json::from_slice(bytes)
+            .map_err(|e| format!("Plugin page \"{json_path}\" is not valid JSON: {e}"))?;
+        Ok(ComExtPageSource::Declarative { document })
     }
 
     /// Read a workflow document from an enabled plugin.
@@ -377,6 +414,20 @@ impl ComExtStore {
     }
 
     fn read_document(&self, plugin_id: &str, relative: &str) -> Result<serde_json::Value, String> {
+        let files = self.verified_files(plugin_id)?;
+        let bytes = files
+            .get(relative)
+            .ok_or_else(|| format!("Plugin \"{plugin_id}\" has no document \"{relative}\""))?;
+        serde_json::from_slice(bytes)
+            .map_err(|e| format!("Plugin document \"{relative}\" is not valid JSON: {e}"))
+    }
+
+    /// Load every installed file for an enabled plugin, re-verifying the
+    /// recorded index.
+    ///
+    /// The whole set is re-read on every access so an edit made directly on disk
+    /// is caught before any of it is handed to the renderer.
+    fn verified_files(&self, plugin_id: &str) -> Result<BTreeMap<String, Vec<u8>>, String> {
         super::manifest::validate_plugin_id(plugin_id)?;
         let installation = self
             .get_installed(plugin_id)?
@@ -392,8 +443,6 @@ impl ComExtStore {
         let index: FileIndex = serde_json::from_slice(&index_bytes)
             .map_err(|e| format!("Plugin \"{plugin_id}\" has an invalid file index: {e}"))?;
 
-        // Re-read the whole installed set so an on-disk edit is caught before
-        // the document is handed to the renderer.
         let mut files = BTreeMap::new();
         for entry in &index.files {
             let path = package::safe_join(&version_dir, &entry.path)?;
@@ -402,12 +451,7 @@ impl ComExtStore {
             files.insert(entry.path.clone(), bytes);
         }
         package::verify_installed_files(&files, &index)?;
-
-        let bytes = files
-            .get(relative)
-            .ok_or_else(|| format!("Plugin \"{plugin_id}\" has no document \"{relative}\""))?;
-        serde_json::from_slice(bytes)
-            .map_err(|e| format!("Plugin document \"{relative}\" is not valid JSON: {e}"))
+        Ok(files)
     }
 
     // -- plugin storage ------------------------------------------------------
@@ -568,6 +612,22 @@ mod tests {
         package_with_manifest(id, capabilities, |manifest| manifest)
     }
 
+    /// Build a package whose page is a self-contained HTML application.
+    fn package_with_html_page(id: &str, html: &str) -> Vec<u8> {
+        let manifest = package_manifest(id, r#""files.list""#);
+        let mut buffer = Vec::new();
+        {
+            let mut writer = zip::ZipWriter::new(Cursor::new(&mut buffer));
+            let options = zip::write::SimpleFileOptions::default();
+            writer.start_file("com_ext.json", options).unwrap();
+            writer.write_all(manifest.as_bytes()).unwrap();
+            writer.start_file("pages/home.html", options).unwrap();
+            writer.write_all(html.as_bytes()).unwrap();
+            writer.finish().unwrap();
+        }
+        buffer
+    }
+
     #[test]
     fn installs_and_lists_a_plugin() {
         let (store, _directory) = store();
@@ -651,7 +711,52 @@ mod tests {
 
         store.set_enabled("org.example.test", true).unwrap();
         let page = store.read_page("org.example.test", "home").unwrap();
-        assert_eq!(page["title"], "Home");
+        let ComExtPageSource::Declarative { document } = page else {
+            panic!("a package with pages/home.json must read back as a declarative page");
+        };
+        assert_eq!(document["title"], "Home");
+    }
+
+    #[test]
+    fn reads_an_html_page_as_a_self_contained_application() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package_with_html_page(
+                "org.example.html",
+                "<!doctype html><p id=\"out\">hi</p><script>2 + 2</script>",
+            ))
+            .unwrap();
+        store.set_enabled("org.example.html", true).unwrap();
+
+        let page = store.read_page("org.example.html", "home").unwrap();
+        let ComExtPageSource::Html { html } = page else {
+            panic!("a package with pages/home.html must read back as an application");
+        };
+        assert!(html.contains("id=\"out\""), "got: {html}");
+        assert!(html.contains("2 + 2"), "the page's own script must survive: {html}");
+    }
+
+    #[test]
+    fn an_html_page_is_covered_by_the_same_integrity_check() {
+        let (store, _directory) = store();
+        store
+            .install_package(&package_with_html_page("org.example.html", "<p>safe</p>"))
+            .unwrap();
+        store.set_enabled("org.example.html", true).unwrap();
+
+        fs::write(
+            store
+                .version_dir("org.example.html", "1.0.0")
+                .join("pages")
+                .join("home.html"),
+            b"<p>evil</p>",
+        )
+        .unwrap();
+
+        let error = store
+            .read_page("org.example.html", "home")
+            .expect_err("an on-disk edit must be caught for an application too");
+        assert!(error.contains("modified after installation"), "got: {error}");
     }
 
     #[test]

@@ -322,32 +322,46 @@ fn validate_capabilities(capabilities: &[String]) -> Result<(), String> {
 }
 
 fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
-    let mut ids = std::collections::BTreeSet::new();
+    // Ids are unique within a list, not across lists. A navigation entry and a
+    // page are different surfaces reached different ways, so an author who
+    // names both after the feature they describe is doing the obvious thing,
+    // not making a mistake worth refusing.
+    fn unique<'a>(
+        ids: &mut std::collections::BTreeSet<&'a str>,
+        id: &'a str,
+    ) -> Result<(), String> {
+        if ids.insert(id) {
+            Ok(())
+        } else {
+            Err(format!("Duplicate entrypoint id \"{id}\""))
+        }
+    }
 
+    let mut navigation = std::collections::BTreeSet::new();
     for entry in &entrypoints.navigation {
         validate_entry_id(&entry.id)?;
         validate_display_string(&entry.label, "navigation label", MAX_NAME_LEN)?;
         validate_entry_id(&entry.page)?;
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut navigation, &entry.id)?;
     }
+
+    let mut settings = std::collections::BTreeSet::new();
     for entry in &entrypoints.settings {
         validate_entry_id(&entry.id)?;
         validate_display_string(&entry.label, "settings label", MAX_NAME_LEN)?;
         validate_entry_id(&entry.page)?;
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut settings, &entry.id)?;
     }
+
+    let mut pages = std::collections::BTreeSet::new();
     for entry in &entrypoints.pages {
         validate_entry_id(&entry.id)?;
         validate_display_string(&entry.label, "page label", MAX_NAME_LEN)?;
         validate_entry_id(&entry.page)?;
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut pages, &entry.id)?;
     }
+
+    let mut slots = std::collections::BTreeSet::new();
     for entry in &entrypoints.slots {
         validate_entry_id(&entry.id)?;
         validate_entry_id(&entry.page)?;
@@ -358,10 +372,10 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
                 COM_EXT_SLOT_POINTS.join(", ")
             ));
         }
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut slots, &entry.id)?;
     }
+
+    let mut actions = std::collections::BTreeSet::new();
     for entry in &entrypoints.actions {
         validate_entry_id(&entry.id)?;
         validate_display_string(&entry.label, "action label", MAX_NAME_LEN)?;
@@ -373,20 +387,19 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
                 COM_EXT_ACTION_POINTS.join(", ")
             ));
         }
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut actions, &entry.id)?;
     }
+
+    let mut hooks = std::collections::BTreeSet::new();
     for entry in &entrypoints.hooks {
         validate_entry_id(&entry.id)?;
         validate_entry_id(&entry.workflow)?;
         if !COM_EXT_HOOK_POINTS.contains(&entry.point.as_str()) {
             return Err(format!("Unknown hook point \"{}\"", entry.point));
         }
-        if !ids.insert(entry.id.as_str()) {
-            return Err(format!("Duplicate entrypoint id \"{}\"", entry.id));
-        }
+        unique(&mut hooks, &entry.id)?;
     }
+
     // Overrides replace a host surface rather than adding to it, and the host
     // has no seam for that yet. A declared override would silently do nothing,
     // so it is refused instead.

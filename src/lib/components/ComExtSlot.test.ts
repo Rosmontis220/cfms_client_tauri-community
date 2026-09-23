@@ -73,9 +73,12 @@ function overview(installed: ComExtInstallation[]): ComExtOverview {
 beforeEach(() => {
   mocks.readComExtPage.mockReset();
   mocks.readComExtPage.mockImplementation(async (_pluginId: string, page: string) => ({
-    schema_version: 1,
-    title: `Panel ${page}`,
-    blocks: [{ type: 'text', text: `from ${page}` }],
+    kind: 'declarative',
+    document: {
+      schema_version: 1,
+      title: `Panel ${page}`,
+      blocks: [{ type: 'text', text: `from ${page}` }],
+    },
   }));
   comExtStore.overview = overview([]);
 });

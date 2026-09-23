@@ -1575,6 +1575,7 @@ export const zh_CN = {
       noneInstalled: '尚未安装社区插件',
       noneInstalledHint: '导入一个 .cfmscomext 文件即可开始使用。',
       installComplete: '插件安装完成，启用后生效。',
+      installCompleteEnabled: '插件安装完成并已启用。',
       installFailed: '插件安装失败',
       uninstall: '卸载',
       uninstallConfirm: '从此设备卸载 {name} 吗？该插件的私有数据也会一并删除。',

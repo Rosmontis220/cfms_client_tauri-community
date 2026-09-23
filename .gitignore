@@ -35,3 +35,8 @@ vite.config.ts.timestamp-*
 reference/
 
 .tauri/
+
+# Built plugin packages: reproducible from `pnpm plugin:build`, so the sources
+# under plugins/ are what belongs in the repository.
+dist-plugins/
+plugins/*/dist/

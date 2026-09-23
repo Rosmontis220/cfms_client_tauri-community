@@ -110,7 +110,7 @@ pub async fn read_com_ext_page(
     state: tauri::State<'_, AppHandleState>,
     plugin_id: String,
     page: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<cfms_service::com_ext::ComExtPageSource, String> {
     let store = state.com_ext.clone();
     tokio::task::spawn_blocking(move || store.read_page(&plugin_id, &page))
         .await

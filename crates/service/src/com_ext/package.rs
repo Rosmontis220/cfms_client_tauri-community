@@ -221,13 +221,28 @@ pub fn validate_package(package: &[u8]) -> Result<ValidatedComExtPackage, String
         .map_err(|e| format!("Invalid plugin manifest: {e}"))?;
     manifest::validate_manifest(&manifest)?;
 
-    // Referenced entrypoints must actually be present.
+    // Referenced entrypoints must actually be present. A page id resolves to a
+    // self-contained HTML application or to a declarative document, never both:
+    // an author who leaves both behind has two answers to the same question.
     for (entry_id, page) in manifest::referenced_pages(&manifest) {
-        let path = format!("pages/{page}.json");
-        let bytes = files
-            .get(&path)
-            .ok_or_else(|| format!("Entrypoint \"{entry_id}\" references missing page \"{path}\""))?;
-        ensure_json_object(bytes, &path)?;
+        let html_path = format!("pages/{page}.html");
+        let json_path = format!("pages/{page}.json");
+        match (files.get(&html_path), files.get(&json_path)) {
+            (Some(_), Some(_)) => {
+                return Err(format!(
+                    "Entrypoint \"{entry_id}\" is ambiguous: \"{html_path}\" and \"{json_path}\" \
+                     both exist. Keep one."
+                ));
+            }
+            (None, Some(bytes)) => ensure_json_object(bytes, &json_path)?,
+            (Some(_), None) => {}
+            (None, None) => {
+                return Err(format!(
+                    "Entrypoint \"{entry_id}\" references missing page: neither \"{html_path}\" \
+                     nor \"{json_path}\" is present"
+                ));
+            }
+        }
     }
     for (entry_id, workflow) in manifest::referenced_workflows(&manifest) {
         let path = format!("workflows/{workflow}.json");
@@ -282,7 +297,7 @@ pub fn verify_installed_files(
 fn validate_package_path(path: &str) -> Result<(), String> {
     let allowed = path == COM_EXT_MANIFEST_FILENAME
         || path == "META-INF/files.json"
-        || (path.starts_with("pages/") && path.ends_with(".json"))
+        || (path.starts_with("pages/") && (path.ends_with(".json") || path.ends_with(".html")))
         || (path.starts_with("workflows/") && path.ends_with(".json"))
         || (path.starts_with("slots/") && path.ends_with(".json"))
         || (path.starts_with("hooks/") && path.ends_with(".json"))
@@ -440,6 +455,139 @@ mod tests {
         let validated = validate_package(&valid_package()).expect("package should be valid");
         assert_eq!(validated.manifest.id, "org.example.test");
         assert_eq!(validated.files.len(), 2);
+    }
+
+    #[test]
+    fn accepts_a_page_shipped_as_a_self_contained_application() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json("org.example.test", "").as_bytes(),
+            ),
+            (
+                "pages/home.html",
+                b"<!doctype html><p>hi</p><script>2+2</script>",
+            ),
+        ]);
+
+        let validated = validate_package(&package).expect("an html page should be accepted");
+        assert!(validated.files.contains_key("pages/home.html"));
+    }
+
+    #[test]
+    fn rejects_a_page_shipped_as_both_html_and_json() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json("org.example.test", "").as_bytes(),
+            ),
+            ("pages/home.html", b"<p>hi</p>"),
+            ("pages/home.json", br#"{"schema_version":1,"blocks":[]}"#),
+        ]);
+
+        let error = validate_package(&package).expect_err("two answers for one page id must fail");
+        assert!(error.contains("ambiguous"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_a_page_present_in_neither_form() {
+        let package = build(&[(
+            "com_ext.json",
+            manifest_json("org.example.test", "").as_bytes(),
+        )]);
+
+        let error = validate_package(&package).expect_err("a missing page must fail");
+        assert!(error.contains("neither"), "got: {error}");
+    }
+
+    #[test]
+    fn rejects_a_loose_script_next_to_a_page() {
+        // A page is one self-contained file. A plugin that needs code puts it
+        // inside its HTML, so a stray .js beside the page is a packaging
+        // mistake worth naming rather than silently ignoring.
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json("org.example.test", "").as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"blocks":[]}"#),
+            ("pages/home.js", b"alert(1)"),
+        ]);
+
+        let error = validate_package(&package).expect_err("a loose script must be refused");
+        assert!(error.contains("forbidden"), "got: {error}");
+    }
+
+    #[test]
+    fn allows_one_id_to_name_a_page_and_the_navigation_entry_that_opens_it() {
+        // `pages` already declares an entry with id "home", so reusing it on the
+        // navigation list is exactly the collision that used to be refused.
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "navigation": [{ "id": "home", "label": "Home", "page": "home" }]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.html", b"<p>body</p>"),
+        ]);
+
+        validate_package(&package).expect("the same id on two surfaces should be accepted");
+    }
+
+    #[test]
+    fn rejects_the_same_id_twice_on_one_surface() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "navigation": [
+                        { "id": "tools", "label": "Tools", "page": "home" },
+                        { "id": "tools", "label": "Again", "page": "home" }
+                    ]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.html", b"<p>body</p>"),
+        ]);
+
+        let error = validate_package(&package).expect_err("a repeated id must be refused");
+        assert!(error.contains("Duplicate entrypoint id"), "got: {error}");
+    }
+
+    /// End-to-end check of the Node packer against the host's own validator.
+    ///
+    /// The packer and this crate are two independent implementations of one
+    /// format, so the only test that means anything is this one: the host
+    /// reading a real archive the packer wrote. Run `pnpm plugin:build tools`
+    /// to produce the artifact.
+    #[test]
+    fn accepts_a_package_the_node_packer_produced() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("dist-plugins")
+            .join("tools.cfmscomext");
+
+        let Ok(bytes) = std::fs::read(&path) else {
+            eprintln!(
+                "skipped: {} is absent. Run `pnpm plugin:build tools` to produce it.",
+                path.display()
+            );
+            return;
+        };
+
+        let validated = validate_package(&bytes)
+            .unwrap_or_else(|e| panic!("the host refused a package its own packer wrote: {e}"));
+
+        assert_eq!(validated.manifest.id, "org.cfms.tools");
+        assert!(
+            validated.files.contains_key("pages/tools.html"),
+            "the packed plugin must carry its page"
+        );
     }
 
     #[test]

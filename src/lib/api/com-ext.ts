@@ -169,7 +169,19 @@ export function setComExtEnabled(pluginId: string, enabled: boolean): Promise<vo
   return invoke('set_com_ext_enabled', { pluginId, enabled });
 }
 
-export function readComExtPage(pluginId: string, page: string): Promise<DeclarativePage> {
+/**
+ * A page as the host stores it.
+ *
+ * A plugin describes a page one of two ways. `html` is a self-contained
+ * application the host mounts and runs, which is what a tool that computes
+ * something needs. `declarative` is a document the shared block renderer draws,
+ * which is enough for a status panel and needs no code.
+ */
+export type ComExtPageSource =
+  | { kind: 'html'; html: string }
+  | { kind: 'declarative'; document: DeclarativePage };
+
+export function readComExtPage(pluginId: string, page: string): Promise<ComExtPageSource> {
   return invoke('read_com_ext_page', { pluginId, page });
 }
 
