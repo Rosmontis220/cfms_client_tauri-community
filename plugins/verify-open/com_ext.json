@@ -1,0 +1,25 @@
+{
+  "format": "cfmscomext",
+  "schema_version": 1,
+  "id": "org.cfms.verify-open",
+  "name": "Verified document open",
+  "description": "Intercept document activation, verify the local SHA-256 revision, download when needed, then open the verified copy.",
+  "publisher": "CFMS community",
+  "version": "1.0.0",
+  "com_ext_api": "1.0.0",
+  "min_client_version": "1.0.0",
+  "requested_capabilities": [
+    "local.document.state",
+    "local.document.open",
+    "server.document.download",
+    "tasks.read",
+    "tasks.wait",
+    "ui.confirm",
+    "ui.notify"
+  ],
+  "entrypoints": {
+    "pages": [{ "id": "verify-open", "label": "Verified open", "page": "verify-open" }],
+    "handlers": [{ "id": "file-activation", "point": "file.activate", "page": "verify-open", "order": 10 }]
+  },
+  "background_triggers": []
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8" /><style>
+  .chat-app { --surface:#fff; --surface2:#f5f5fb; --text:#20212b; --muted:#636779; --primary:#4e60a1; --line:#dde0eb; --error:#ab3434; color:var(--text); background:var(--surface); font:14px/1.5 'Segoe UI','Noto Sans SC',system-ui,sans-serif; min-height: min(78vh,850px); display:flex; flex-direction:column; }
+  .chat-app * { box-sizing:border-box; }
+  @media(prefers-color-scheme:dark){ .chat-app { --surface:#191b25; --surface2:#252938; --text:#e7e8f1; --muted:#b7bbcc; --primary:#becaff; --line:#3b4255; --error:#ffb4ab; } }
+  .chat-header { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; padding:20px 22px 12px; gap:12px; border-bottom:1px solid var(--line); }
+  .chat-header h1 { margin:0; font-size:23px; } .chat-header p,.chat-hint { color:var(--muted); margin:2px 0; font-size:12px; }
+  .chat-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+  .chat-controls [data-role="sources"] { display:flex; gap:4px; }
+  .chat-app button { font:inherit; cursor:pointer; color:inherit; } .chat-app button:focus-visible,.chat-app a:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+  .chat-controls button,.chat-action { border:1px solid var(--line); background:var(--surface2); border-radius:20px; padding:6px 12px; }
+  .chat-controls button[aria-pressed="true"] { background:var(--primary); color:var(--surface); border-color:var(--primary); }
+  .chat-controls button:disabled { opacity:.5; cursor:wait; }
+  .chat-hint { padding:6px 22px; overflow-wrap:anywhere; } .chat-error { margin:4px 22px; padding:10px; border-radius:8px; background:color-mix(in srgb,var(--error) 12%,var(--surface)); color:var(--error); }
+  .chat-body { display:grid; grid-template-columns:minmax(180px,280px) minmax(0,1fr); flex:1; min-height:430px; }
+  .chat-rooms { border-right:1px solid var(--line); overflow:auto; max-height:72vh; padding:8px; }
+  .chat-room { display:flex; align-items:center; gap:6px; border-radius:12px; padding:6px; }
+  .chat-room[data-active="true"] { background:var(--surface2); }
+  .chat-room-select { min-width:0; flex:1; text-align:left; border:0; background:transparent; padding:5px; }
+  .chat-room-select strong,.chat-room-select small { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .chat-room-select small { color:var(--muted); font-size:11px; }
+  .chat-rename { border:0; background:transparent; color:var(--muted); padding:6px; border-radius:50%; }
+  .chat-view { min-width:0; display:flex; flex-direction:column; max-height:72vh; }
+  .chat-view-header { padding:12px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .chat-view-header h2 { font-size:17px; margin:0; } .chat-view-header p { margin:0; color:var(--muted); font-size:11px; overflow-wrap:anywhere; }
+  .chat-messages { flex:1; overflow:auto; padding:12px 20px; }
+  .chat-msg { margin-bottom:15px; max-width:760px; }
+  .chat-msg-head { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:4px; }
+  .chat-msg-head button { border:0; background:transparent; padding:0; font-weight:600; color:var(--primary); }
+  .chat-msg-head time { color:var(--muted); font-size:11px; }
+  .chat-bubble { border-left:4px solid; border-radius:4px 12px 12px 12px; padding:9px 12px; color:#20212b; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .chat-reply { border-bottom:1px solid #8992a14d; padding-bottom:5px; margin-bottom:5px; font-size:12px; }
+  .chat-bubble a { color:#314ba9; text-decoration:underline; }
+  .chat-state { color:var(--muted); padding:24px; text-align:center; }
+  .chat-nonformat { padding:10px 20px; max-height:150px; overflow:auto; background:var(--surface2); }
+  .chat-nonformat h3 { margin:0 0 6px; font-size:13px; }.chat-nonformat p { margin:5px 0; } .chat-nonformat code { display:block; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .chat-attachments { border-top:1px solid var(--line); padding:10px 20px; display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+  .chat-attachments strong { font-size:12px; }.chat-attachments button { border:1px solid var(--line); background:var(--surface2); border-radius:18px; padding:4px 10px; max-width:100%; overflow-wrap:anywhere; }
+  @media(max-width:650px){ .chat-body { grid-template-columns:1fr; grid-template-rows:140px minmax(360px,1fr); } .chat-rooms { border-right:0; border-bottom:1px solid var(--line); max-height:140px; }.chat-view { max-height:65vh; }.chat-header { padding:12px; }.chat-hint { padding:6px 12px; } }
+</style></head>
+<body><main class="chat-app" data-role="app">
+  <header class="chat-header"><div><h1>聊天记录</h1><p>浏览在线或本地聊天室</p></div><div class="chat-controls">
+    <button type="button" data-action="online">在线</button><button type="button" data-action="local">本地</button>
+    <span data-role="sources"><button type="button" data-action="runtime" title="/.runtime/chatbox">运行时</button><button type="button" data-action="echo" title="/回响/.reserved/chatbox">回响</button></span>
+    <button type="button" data-action="folder" hidden>选择文件夹</button><button type="button" data-action="refresh">刷新</button>
+  </div></header>
+  <p class="chat-hint" data-role="hint"></p><p class="chat-error" data-role="error" role="alert" hidden></p>
+  <div class="chat-body"><aside class="chat-rooms" data-role="rooms" aria-label="聊天室"></aside><section class="chat-view" data-role="view" aria-label="聊天内容"></section></div>
+</main><!--BUNDLE--></body></html>

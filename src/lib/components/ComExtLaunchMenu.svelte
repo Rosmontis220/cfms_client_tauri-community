@@ -13,7 +13,7 @@
    * only computes — a converter, a cipher tool — is useful precisely when
    * nobody is signed in. The workspace sidebar is account-scoped, so it cannot
    * carry these entries before sign-in; this sits in the shared top-right
-   * toolbar of the signed-out routes instead, beside Settings and About.
+   * toolbar of the server-address screen only, beside Settings and About.
    *
    * Only navigation entrypoints appear. A plugin that contributes just a slot
    * has nothing to launch, so it adds no item here and the button stays hidden.

@@ -108,22 +108,15 @@ describe('community plugin settings page', () => {
     ).toBeTruthy();
   });
 
-  it('lists an installed plugin with its declared capabilities', async () => {
+  it('lists an installed plugin without capability-grant controls', async () => {
     mocks.getComExtOverview.mockResolvedValue(overview([installation()]));
     const { container } = render(ComExtSettingsPage);
-
     expect(await screen.findByText('Test Plugin')).toBeTruthy();
     expect(screen.getByText(/tests · v1\.0\.0/)).toBeTruthy();
-
-    // Scope to the plugin card: the capability reference further down the page
-    // repeats these labels.
-    const declared = Array.from(
-      container.querySelectorAll('.plugin-card details li'),
-    ).map((node) => node.textContent?.trim());
-    expect(declared).toEqual(['List server directories', 'Read transfer task state']);
+    expect(container.querySelector('.plugin-card details')).toBeNull();
   });
 
-  it('asks for confirmation before enabling and then enables', async () => {
+  it('enables a plugin without requesting capability grants', async () => {
     mocks.getComExtOverview.mockResolvedValue(overview([installation()]));
     const { container } = render(ComExtSettingsPage);
     await screen.findByText('Test Plugin');
@@ -134,11 +127,10 @@ describe('community plugin settings page', () => {
     await waitFor(() =>
       expect(mocks.setComExtEnabled).toHaveBeenCalledWith('org.example.test', true),
     );
-    // The capability prompt must name the plugin before anything is granted.
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Test Plugin'));
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
-  it('does not enable when the capability prompt is declined', async () => {
+  it('does not consult confirmation state when enabling', async () => {
     mocks.getComExtOverview.mockResolvedValue(overview([installation()]));
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     const { container } = render(ComExtSettingsPage);
@@ -146,7 +138,8 @@ describe('community plugin settings page', () => {
 
     await fireEvent.click(container.querySelector('.switch input') as HTMLInputElement);
 
-    expect(mocks.setComExtEnabled).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.setComExtEnabled).toHaveBeenCalledWith('org.example.test', true));
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it('disables an enabled plugin without prompting', async () => {

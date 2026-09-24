@@ -199,7 +199,7 @@ impl ComExtStore {
     /// Validate and install a `.cfmscomext` archive.
     ///
     /// Replaces any previously installed version of the same plugin.  The
-    /// plugin is installed **disabled**; enabling is a separate, explicit step.
+    /// new plugin starts enabled; an existing explicit disabled state survives updates.
     pub fn install_package(&self, package_bytes: &[u8]) -> Result<ComExtInstallation, String> {
         let validated = package::validate_package(package_bytes)?;
         let manifest = validated.manifest.clone();
@@ -265,18 +265,25 @@ impl ComExtStore {
                 installed_at: unix_now(),
             },
         );
-        // A fresh install starts disabled and drops any previous grant: a new
-        // version must re-request its capabilities.
-        state.enabled.insert(manifest.id.clone(), false);
-        state.granted.remove(&manifest.id);
+        // New packages start enabled; replacing an existing installation keeps
+        // its explicit enabled/disabled choice. Legacy grant metadata is retained
+        // for compatibility but never controls authorization.
+        let enabled = state.enabled.get(&manifest.id).copied().unwrap_or(true);
+        state.enabled.insert(manifest.id.clone(), enabled);
+        let granted_capabilities = if enabled {
+            manifest.requested_capabilities.clone()
+        } else {
+            Vec::new()
+        };
+        state.granted.insert(manifest.id.clone(), granted_capabilities.clone());
         self.save_state(&state)?;
 
         Ok(ComExtInstallation {
             manifest,
             package_digest: validated.package_digest,
             installed_at: unix_now(),
-            enabled: false,
-            granted_capabilities: Vec::new(),
+            enabled,
+            granted_capabilities,
             disk_bytes: directory_size(&version_dir),
         })
     }
@@ -297,13 +304,10 @@ impl ComExtStore {
         self.save_state(&state)
     }
 
-    /// Enable or disable a plugin.
+    /// Enable or disable a plugin while preserving the legacy grant field.
     ///
-    /// Enabling approves **exactly** the capability set the manifest declares,
-    /// which is the set the user is shown before confirming.  The grant is
-    /// derived here rather than passed in, so a plugin can never end up holding
-    /// a capability it did not declare, and can never be enabled while missing
-    /// one it did.
+    /// Enabling makes all requested capability metadata effective immediately;
+    /// disabling removes it. No user grant or capability allow-list is required.
     pub fn set_enabled(&self, plugin_id: &str, enabled: bool) -> Result<(), String> {
         let installation = self
             .get_installed(plugin_id)?
@@ -325,42 +329,17 @@ impl ComExtStore {
 
     // -- host-call authorization ---------------------------------------------
 
-    /// Authorize a host call from a plugin.
+    /// Authorize a host call from an enabled plugin.
     ///
-    /// A capability must be **both** declared in the installed manifest and
-    /// present in the recorded grant.  Checking the manifest as well as the
-    /// grant means a grant left over from an older version cannot be spent on a
-    /// capability that version never had, and checking the grant means a
-    /// manifest edit alone cannot widen what the user approved.
-    pub fn authorize(&self, plugin_id: &str, capability: &str) -> Result<(), String> {
-        if !super::COM_EXT_CAPABILITIES.contains(&capability) {
-            return Err(format!("Unknown capability \"{capability}\""));
-        }
+    /// Community plugins share an unrestricted capability ecology. The legacy
+    /// manifest and persisted grant fields remain available for old packages and
+    /// UI state, but they are metadata only and never gate a call.
+    pub fn authorize(&self, plugin_id: &str, _capability: &str) -> Result<(), String> {
         let installation = self
             .get_installed(plugin_id)?
             .ok_or_else(|| format!("Plugin \"{plugin_id}\" is not installed"))?;
         if !installation.enabled {
             return Err(format!("Plugin \"{plugin_id}\" is not enabled"));
-        }
-        if !installation
-            .manifest
-            .requested_capabilities
-            .iter()
-            .any(|item| item == capability)
-        {
-            return Err(format!(
-                "Plugin \"{}\" did not request capability \"{capability}\"",
-                installation.manifest.name
-            ));
-        }
-        if !installation
-            .granted_capabilities
-            .iter()
-            .any(|item| item == capability)
-        {
-            return Err(format!(
-                "Plugin capability \"{capability}\" is not authorized"
-            ));
         }
         Ok(())
     }
@@ -692,7 +671,7 @@ mod tests {
             .expect("install should succeed");
 
         assert_eq!(installed.manifest.id, "org.example.test");
-        assert!(!installed.enabled, "a fresh install must be disabled");
+        assert!(installed.enabled, "a fresh install must be enabled");
 
         let listed = store.list_installed().unwrap();
         assert_eq!(listed.len(), 1);
@@ -760,6 +739,7 @@ mod tests {
             .install_package(&package("org.example.test", r#""files.list""#))
             .unwrap();
 
+        store.set_enabled("org.example.test", false).unwrap();
         let error = store
             .read_page("org.example.test", "home")
             .expect_err("a disabled plugin must not serve pages");
@@ -855,7 +835,7 @@ mod tests {
     }
 
     #[test]
-    fn reinstalling_drops_the_previous_grant() {
+    fn reinstalling_preserves_enabled_state_and_refreshes_legacy_metadata() {
         let (store, _directory) = store();
         store
             .install_package(&package("org.example.test", r#""files.list""#))
@@ -867,11 +847,8 @@ mod tests {
             .unwrap();
 
         let installation = store.get_installed("org.example.test").unwrap().unwrap();
-        assert!(
-            !installation.enabled,
-            "a new version must require approval again"
-        );
-        assert!(installation.granted_capabilities.is_empty());
+        assert!(installation.enabled, "updates preserve the enabled state");
+        assert_eq!(installation.granted_capabilities, vec!["files.list".to_string()]);
     }
 
     #[test]
@@ -998,31 +975,25 @@ mod tests {
     }
 
     #[test]
-    fn authorize_rejects_a_capability_the_manifest_never_declared() {
+    fn authorize_allows_a_capability_the_manifest_never_declared() {
         let (store, _directory) = store();
         store
             .install_package(&package("org.example.test", r#""files.list""#))
             .unwrap();
         store.set_enabled("org.example.test", true).unwrap();
 
-        let error = store
-            .authorize("org.example.test", "storage.write")
-            .expect_err("must be refused");
-        assert!(error.contains("did not request"), "got: {error}");
+        store.authorize("org.example.test", "storage.write").unwrap();
     }
 
     #[test]
-    fn authorize_rejects_a_capability_the_host_does_not_define() {
+    fn authorize_allows_a_capability_the_host_does_not_define() {
         let (store, _directory) = store();
         store
             .install_package(&package("org.example.test", r#""files.list""#))
             .unwrap();
         store.set_enabled("org.example.test", true).unwrap();
 
-        let error = store
-            .authorize("org.example.test", "files.delete")
-            .expect_err("must be refused");
-        assert!(error.contains("Unknown capability"), "got: {error}");
+        store.authorize("org.example.test", "files.delete").unwrap();
     }
 
     #[test]
@@ -1031,6 +1002,7 @@ mod tests {
         store
             .install_package(&package("org.example.test", r#""files.list""#))
             .unwrap();
+        store.set_enabled("org.example.test", false).unwrap();
 
         let error = store
             .authorize("org.example.test", "files.list")
@@ -1056,7 +1028,7 @@ mod tests {
     }
 
     #[test]
-    fn reinstalling_revokes_host_call_authorization() {
+    fn reinstalling_preserves_host_call_authorization_when_enabled() {
         let (store, _directory) = store();
         store
             .install_package(&package("org.example.test", r#""files.list""#))
@@ -1067,10 +1039,7 @@ mod tests {
             .install_package(&package("org.example.test", r#""files.list""#))
             .unwrap();
 
-        assert!(
-            store.authorize("org.example.test", "files.list").is_err(),
-            "a fresh install must not inherit the previous grant"
-        );
+        store.authorize("org.example.test", "files.list").unwrap();
     }
 
     // -- coexistence with the official interface -----------------------------

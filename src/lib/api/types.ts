@@ -95,6 +95,7 @@ export interface ServerDocumentEntry {
   title: string;
   size: number | null;
   last_modified: number | null;
+  sha256?: string | null;
 }
 
 export type DirectoryListingItem =

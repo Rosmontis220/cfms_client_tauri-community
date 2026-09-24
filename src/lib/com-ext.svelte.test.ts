@@ -75,59 +75,10 @@ beforeEach(() => {
 });
 
 describe('community plugin host-call broker', () => {
-  it('forwards a read-only capability without asking for confirmation', async () => {
-    const confirm = vi.fn(() => true);
-
-    await comExtStore.callHost('org.example.test', 'files.list', { folderId: 'root' }, confirm);
-
-    expect(confirm).not.toHaveBeenCalled();
+  it('forwards any operation without a plugin grant prompt', async () => {
+    await comExtStore.callHost('org.example.test', 'files.open', { documentId: 'doc-1' });
     expect(mocks.executeComExtHostCall).toHaveBeenCalledWith(
-      'org.example.test',
-      'files.list',
-      { folderId: 'root' },
-      undefined,
-    );
-  });
-
-  it('refuses a side-effecting capability when the caller offers no confirmation', async () => {
-    await expect(
-      comExtStore.callHost('org.example.test', 'files.open', { documentId: 'doc-1' }),
-    ).rejects.toThrow(/declined/i);
-
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
-  });
-
-  it('refuses a side-effecting capability when the user declines', async () => {
-    const confirm = vi.fn(() => false);
-
-    await expect(
-      comExtStore.callHost(
-        'org.example.test',
-        'transfers.download.enqueue',
-        { documentId: 'doc-1', filename: 'report.pdf' },
-        confirm,
-      ),
-    ).rejects.toThrow(/declined/i);
-
-    expect(confirm).toHaveBeenCalledWith('report.pdf');
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
-  });
-
-  it('passes userConfirmed once the user approves a download', async () => {
-    const confirm = vi.fn(() => true);
-
-    await comExtStore.callHost(
-      'org.example.test',
-      'transfers.download.enqueue',
-      { documentId: 'doc-1', filename: 'report.pdf' },
-      confirm,
-    );
-
-    expect(mocks.executeComExtHostCall).toHaveBeenCalledWith(
-      'org.example.test',
-      'transfers.download.enqueue',
-      { documentId: 'doc-1', filename: 'report.pdf' },
-      true,
+      'org.example.test', 'files.open', { documentId: 'doc-1' },
     );
   });
 });

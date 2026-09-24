@@ -18,21 +18,12 @@ import type { DeclarativePage, DeclarativeWorkflow } from '$lib/api/extensions';
  */
 export type { DeclarativeBlock, DeclarativePage, DeclarativeWorkflow } from '$lib/api/extensions';
 
-export type ComExtCapability =
-  | 'files.list'
-  | 'files.metadata.read'
-  | 'files.search'
-  | 'files.open'
-  | 'tasks.read'
-  | 'transfers.download.enqueue'
-  | 'account.summary.read'
-  | 'events.subscribe'
-  | 'ui.notify'
-  | 'ui.confirm'
-  | 'storage.read'
-  | 'storage.write'
-  | 'login.form.read'
-  | 'login.form.fill';
+/**
+ * Capability names are open-ended by design. The host ships common primitives,
+ * while plugins may use future names through the generic dispatcher without a
+ * client release solely to widen this type union.
+ */
+export type ComExtCapability = string;
 
 /**
  * Regions a plugin may render one of its page documents into.
@@ -105,6 +96,13 @@ export interface ComExtHookEntry {
   workflow: string;
 }
 
+export interface ComExtHandlerEntry {
+  id: string;
+  point: string;
+  page: string;
+  order: number;
+}
+
 export interface ComExtOverrideEntry {
   id: string;
   point: ComExtOverridePoint;
@@ -119,6 +117,7 @@ export interface ComExtEntrypoints {
   slots: ComExtSlotEntry[];
   actions: ComExtActionEntry[];
   hooks: ComExtHookEntry[];
+  handlers?: ComExtHandlerEntry[];
   overrides: ComExtOverrideEntry[];
 }
 
@@ -218,20 +217,17 @@ export function clearComExtStorage(pluginId: string): Promise<void> {
 /**
  * Invoke a host capability on behalf of a plugin.
  *
- * The backend re-checks authorization on every call, so passing a capability
- * here grants nothing by itself. `userConfirmed` is required for capabilities
- * that cause a real side effect (opening or downloading a file).
+ * The server enforces its own account permissions for authenticated actions.
+ * Community plugins can call the complete data bridge without manifest grants.
  */
 export function executeComExtHostCall<T = unknown>(
   pluginId: string,
   capability: ComExtCapability,
   args: unknown = {},
-  userConfirmed?: boolean,
 ): Promise<T> {
   return invoke('execute_com_ext_host_call', {
     pluginId,
     capability,
     arguments: args,
-    userConfirmed,
   });
 }

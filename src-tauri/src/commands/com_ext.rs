@@ -38,8 +38,7 @@ pub async fn get_com_ext_overview(
 
 /// Install a `.cfmscomext` archive from a path chosen by the user.
 ///
-/// The plugin is installed disabled; enabling is a separate command so the
-/// capability prompt cannot be skipped.
+/// New installs are enabled immediately; existing enabled state survives updates.
 #[tauri::command]
 pub async fn import_com_ext_package(
     state: tauri::State<'_, AppHandleState>,
@@ -91,8 +90,7 @@ pub async fn uninstall_com_ext_plugin(
 
 /// Enable or disable a plugin.
 ///
-/// Enabling approves exactly the capabilities the manifest declares; the store
-/// derives the grant, so the caller cannot widen or narrow it.
+/// Enabling activates the plugin; requested capabilities are informational.
 #[tauri::command]
 pub async fn set_com_ext_enabled(
     state: tauri::State<'_, AppHandleState>,
@@ -193,15 +191,12 @@ pub async fn clear_com_ext_storage(
         .map_err(|e| format!("Community plugin storage clear task failed: {e}"))?
 }
 
-/// Broker a host call from a plugin.
-///
-/// The authorization check runs first and is the only gate: a capability must
-/// be declared in the installed manifest *and* present in the recorded grant.
-/// The dispatcher below therefore never has to re-check permissions, and an
-/// unknown capability can never fall through to a handler.
-///
-/// `files.open` and `transfers.download.enqueue` both cause a real download, so
-/// both require `userConfirmed`, exactly as the official broker does.
+// Generic data bridge helpers share the same dispatcher and do not need their
+// own Tauri command registration.
+include!("com_ext_data.rs");
+
+/// Broker a host call from a community plugin. Server-side permissions still
+/// apply to authenticated actions; the community bridge has no capability gate.
 #[tauri::command]
 pub async fn execute_com_ext_host_call(
     app_handle: tauri::AppHandle,
@@ -209,18 +204,92 @@ pub async fn execute_com_ext_host_call(
     plugin_id: String,
     capability: String,
     arguments: serde_json::Value,
-    user_confirmed: Option<bool>,
+    _user_confirmed: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    {
-        let store = state.com_ext.clone();
-        let gate_plugin = plugin_id.clone();
-        let gate_capability = capability.clone();
-        tokio::task::spawn_blocking(move || store.authorize(&gate_plugin, &gate_capability))
-            .await
-            .map_err(|e| format!("Community plugin authorization task failed: {e}"))??;
-    }
-
     match capability.as_str() {
+        "server.action" => {
+            let action = required_bridge_string(&arguments, "action")?;
+            let payload = arguments
+                .get("payload")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let response = server_action_response(&state, action, payload).await?;
+            serde_json::to_value(response)
+                .map_err(|error| format!("Failed to serialize server response: {error}"))
+        }
+        "server.path.resolve" => {
+            let path = required_bridge_string(&arguments, "path")?.to_string();
+            serde_json::to_value(resolve_node_path(state, path).await?)
+                .map_err(|error| format!("Failed to serialize node path: {error}"))
+        }
+        "server.directory.list" => {
+            let folder_id = arguments
+                .get("folderId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            serde_json::to_value(list_directory(state, folder_id).await?)
+                .map_err(|error| format!("Failed to serialize directory: {error}"))
+        }
+        "server.document.readText" => {
+            let document_id = required_bridge_string(&arguments, "documentId")?;
+            read_com_ext_server_text(&state, document_id).await
+        }
+        "local.directory.scan" => {
+            let dir = required_bridge_string(&arguments, "dir")?.to_string();
+            tokio::task::spawn_blocking(move || scan_com_ext_local_chatbox(&dir))
+                .await
+                .map_err(|error| format!("Local folder scan task failed: {error}"))?
+        }
+        "local.folder.scan" => {
+            let path = required_bridge_string(&arguments, "path")?.to_string();
+            let pattern = arguments
+                .get("pattern")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            serde_json::to_value(scan_directory(path, pattern).await?)
+                .map_err(|error| format!("Failed to serialize scan results: {error}"))
+        }
+        "local.path.open" => {
+            let path = required_bridge_string(&arguments, "path")?.to_string();
+            open_com_ext_local_path(&app_handle, &path)?;
+            Ok(serde_json::json!({ "opened": true }))
+        }
+        "local.file.readText" => {
+            let path = required_bridge_string(&arguments, "path")?.to_string();
+            tokio::task::spawn_blocking(move || read_com_ext_local_text(&path))
+                .await
+                .map_err(|error| format!("Local file read task failed: {error}"))?
+        }
+        "local.file.writeText" => {
+            let path = required_bridge_string(&arguments, "path")?.to_string();
+            let content = required_bridge_string(&arguments, "content")?.to_string();
+            tokio::task::spawn_blocking(move || write_com_ext_local_text(&path, &content))
+                .await
+                .map_err(|error| format!("Local file write task failed: {error}"))?
+        }
+        "local.document.state" => {
+            let relative_path = required_bridge_string(&arguments, "relativePath")?.to_string();
+            let sha256 = arguments
+                .get("sha256")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let size = arguments.get("size").and_then(serde_json::Value::as_u64);
+            let root = download_root(&app_handle)?;
+            tokio::task::spawn_blocking(move || {
+                com_ext_local_document_state(&root, &relative_path, sha256.as_deref(), size)
+            })
+            .await
+            .map_err(|error| format!("Local document state task failed: {error}"))?
+        }
+        "local.document.open" => {
+            let relative_path = required_bridge_string(&arguments, "relativePath")?;
+            let path = resolve_download_subdirectory(download_root(&app_handle)?, relative_path)?;
+            if !path.is_file() {
+                return Ok(serde_json::json!({ "opened": false }));
+            }
+            open_com_ext_local_path(&app_handle, &path.to_string_lossy())?;
+            Ok(serde_json::json!({ "opened": true }))
+        }
         "account.summary.read" => Ok(serde_json::json!({
             "username": state.inner.username.read().await.clone(),
             "nickname": state.inner.nickname.read().await.clone(),
@@ -278,12 +347,7 @@ pub async fn execute_com_ext_host_call(
             )
             .await
         }
-        "files.open" | "transfers.download.enqueue" => {
-            if user_confirmed != Some(true) {
-                return Err(
-                    "A user confirmation is required before opening or downloading a file".into(),
-                );
-            }
+        "files.open" | "transfers.download.enqueue" | "server.document.download" => {
             let document_id = arguments
                 .get("documentId")
                 .and_then(serde_json::Value::as_str)
@@ -352,8 +416,8 @@ pub async fn execute_com_ext_host_call(
         "events.subscribe" => Ok(serde_json::json!({
             "supportedEvents": ["connection.changed", "tasks.changed"],
         })),
-        // `authorize` already rejected anything outside the host's capability
-        // list, so this arm is unreachable for a well-formed call.
-        other => Err(format!("Unsupported community plugin capability \"{other}\"")),
+        other => Err(format!(
+            "Unsupported community plugin capability \"{other}\""
+        )),
     }
 }

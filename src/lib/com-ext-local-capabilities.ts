@@ -1,24 +1,9 @@
+import { open } from '@tauri-apps/plugin-dialog';
 import type { ComExtCapability } from '$lib/api/com-ext';
+import { waitForComExtDownloadTask } from '$lib/com-ext-task-wait';
+import { notificationStore } from '$lib/stores.svelte';
 
-/**
- * Capabilities the running app answers itself.
- *
- * Almost every host capability is answered by the backend, which owns the data
- * it returns. A few cannot be: the sign-in form is component state in the
- * running UI, and no Rust command can read a Svelte variable. Those
- * capabilities are published here by the screen that owns them, and the plugin
- * page bridge consults this registry before it falls through to IPC.
- *
- * A registration lasts exactly as long as the screen that made it, so a
- * capability is unavailable precisely when its screen is not mounted. That is
- * the intended behaviour rather than a limitation: `login.form.read` returns
- * the sign-in form, and once the user is signed in there is no sign-in form to
- * return.
- *
- * Authorization is not this module's job. The bridge checks the caller's grant
- * before it looks here, so a plugin cannot reach a capability it never declared
- * and the user never approved.
- */
+/** Frontend-owned host operations and temporary capabilities supplied by screens. */
 export type ComExtLocalCapabilityHandler = (
   pluginId: string,
   args: Record<string, unknown>,
@@ -26,12 +11,7 @@ export type ComExtLocalCapabilityHandler = (
 
 const handlers = new Map<ComExtCapability, ComExtLocalCapabilityHandler>();
 
-/**
- * Publish a capability until the returned function is called.
- *
- * The screen that owns the capability calls this from its own mount and calls
- * the result on teardown, so two screens never both claim the same one.
- */
+/** Publish a screen-owned capability until the returned function is called. */
 export function provideComExtLocalCapability(
   capability: ComExtCapability,
   handler: ComExtLocalCapabilityHandler,
@@ -42,20 +22,44 @@ export function provideComExtLocalCapability(
   };
 }
 
-/** Whether some mounted screen currently answers this capability. */
+const builtins: Record<string, ComExtLocalCapabilityHandler> = {
+  'local.folder.choose': async (_pluginId, args) => {
+    const path = await open({
+      directory: true,
+      multiple: false,
+      ...(typeof args.title === 'string' ? { title: args.title } : {}),
+    });
+    return { path: typeof path === 'string' ? path : null };
+  },
+  'ui.confirm': (_pluginId, args) => ({ confirmed: window.confirm(String(args.message ?? '')) }),
+  'ui.notify': (_pluginId, args) => {
+    const message = String(args.message ?? '');
+    const level = String(args.level ?? args.type ?? 'info');
+    if (level === 'success') notificationStore.success(message);
+    else if (level === 'warning') notificationStore.warning(message);
+    else if (level === 'error') notificationStore.error(message);
+    else notificationStore.info(message);
+    return { notified: true };
+  },
+  'tasks.wait': async (_pluginId, args) => {
+    const taskId = String(args.taskId ?? args.task_id ?? '');
+    if (!taskId) throw new Error('tasks.wait requires taskId');
+    return waitForComExtDownloadTask(taskId);
+  },
+};
+
+/** Whether a mounted screen or builtin frontend service answers this capability. */
 export function hasComExtLocalCapability(capability: ComExtCapability): boolean {
-  return handlers.has(capability);
+  return handlers.has(capability) || Object.hasOwn(builtins, capability);
 }
 
-/** Answer a capability on behalf of a plugin. */
+/** Answer a frontend-owned host operation on behalf of an enabled plugin. */
 export async function runComExtLocalCapability(
   capability: ComExtCapability,
   pluginId: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const handler = handlers.get(capability);
-  if (!handler) {
-    throw new Error(`No mounted screen is serving the "${capability}" capability`);
-  }
+  const handler = handlers.get(capability) ?? builtins[capability];
+  if (!handler) throw new Error(`No mounted screen is serving the "${capability}" capability`);
   return handler(pluginId, args);
 }

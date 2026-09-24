@@ -47,7 +47,7 @@ mod package;
 mod store;
 
 pub use manifest::{
-    ComExtActionEntry, ComExtBackgroundTrigger, ComExtEntrypoints, ComExtHookEntry,
+    ComExtActionEntry, ComExtBackgroundTrigger, ComExtEntrypoints, ComExtHandlerEntry, ComExtHookEntry,
     ComExtManifest, ComExtNavigationEntry, ComExtOverrideEntry, ComExtPageEntry, ComExtSlotEntry,
 };
 pub use package::ValidatedComExtPackage;
@@ -82,11 +82,26 @@ pub const COM_EXT_FORMAT: &str = "cfmscomext";
 /// every comparison between an index and a file set must exclude it too.
 pub const COM_EXT_FILES_INDEX_PATH: &str = "META-INF/files.json";
 
-/// Capabilities a community package may request.
+/// Built-in community operations advertised for plugin author convenience.
 ///
-/// This list is owned by this module and evolves independently of the official
-/// [`crate::extensions`] capability set.
+/// This is not a capability allowlist: requested capability names are only
+/// descriptive metadata, and the enabled community interface also exposes
+/// host.invoke for every registered Tauri command.
 pub const COM_EXT_CAPABILITIES: &[&str] = &[
+    "server.action",
+    "server.path.resolve",
+    "server.directory.list",
+    "server.document.readText",
+    "server.document.download",
+    "local.directory.scan",
+    "local.folder.scan",
+    "local.folder.choose",
+    "local.path.open",
+    "local.file.readText",
+    "local.file.writeText",
+    "local.document.state",
+    "local.document.open",
+    "tasks.wait",
     "files.list",
     "files.metadata.read",
     "files.search",

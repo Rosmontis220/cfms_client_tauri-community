@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DownloadTaskDto, ServiceEvent } from './api';
 import { initEventListeners, stopEventListeners } from './events';
 import { downloadStore } from './stores.svelte';
+import { comExtStore } from './com-ext.svelte';
+import { onComExtEvent } from './com-ext-events';
 
 const eventCallbacks = vi.hoisted(() => new Map<string, (payload: { payload: unknown }) => void>());
 
@@ -47,6 +49,7 @@ afterEach(() => {
   eventCallbacks.clear();
   downloadStore.tasks.clear();
   downloadStore.activeBadgeCount = 0;
+  comExtStore.overview = null;
 });
 
 describe('download replacement events', () => {
@@ -65,5 +68,31 @@ describe('download replacement events', () => {
     expect(downloadStore.tasks.get('fresh-task')).toEqual(replacement);
     expect(downloadStore.tasks.size).toBe(1);
     expect(downloadStore.activeBadgeCount).toBe(1);
+  });
+
+  it('delivers task changes to enabled community pages without altering the official channel', async () => {
+    comExtStore.overview = { installed: [
+      { enabled: true, manifest: { id: 'enabled.plugin' } },
+      { enabled: false, manifest: { id: 'disabled.plugin' } },
+    ] } as never;
+    const community = vi.fn();
+    const disabled = vi.fn();
+    const official = vi.fn();
+    const stopCommunity = onComExtEvent('enabled.plugin', 'tasks.changed', community);
+    const stopDisabled = onComExtEvent('disabled.plugin', 'tasks.changed', disabled);
+    window.addEventListener('cfms:extension-event', official);
+    try {
+      await initEventListeners();
+      eventCallbacks.get('cfms:event')?.({ payload: {
+        event: 'DownloadTaskUpdated', data: { task: task('new-task') },
+      } satisfies ServiceEvent });
+      expect(community).toHaveBeenCalledWith(expect.objectContaining({ tasks: [expect.objectContaining({ task_id: 'new-task' })] }));
+      expect(disabled).not.toHaveBeenCalled();
+      expect(official).toHaveBeenCalledTimes(1);
+    } finally {
+      stopCommunity();
+      stopDisabled();
+      window.removeEventListener('cfms:extension-event', official);
+    }
   });
 });

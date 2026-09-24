@@ -3,17 +3,10 @@ import type { ComExtCapability } from '$lib/api/com-ext';
 /**
  * i18n keys for the capability names the user is shown.
  *
- * Two places name a capability to the user: the enable prompt on the plugin
- * manager, which asks before anything is granted, and the confirmation the page
- * bridge raises before a side-effecting call. Both read this one map, so a
- * capability cannot be described one way when it is granted and another way
- * when it is used.
- *
- * The type is exhaustive on purpose: adding a capability to the union without
- * naming it here fails to compile, which is what stops a new capability from
- * reaching a user as a raw dotted string.
+ * Legacy descriptions retained for optional informational displays. This map
+ * does not limit the operations plugins may call or prompt for grants.
  */
-export const CAPABILITY_LABEL_KEYS: Record<ComExtCapability, string> = {
+export const CAPABILITY_LABEL_KEYS: Partial<Record<ComExtCapability, string>> = {
   'files.list': 'settings.comExt.capabilities.files_list',
   'files.metadata.read': 'settings.comExt.capabilities.files_metadata_read',
   'files.search': 'settings.comExt.capabilities.files_search',

@@ -98,6 +98,7 @@
   import { accessEntrySubject } from '$lib/access-entries';
   import { comExtStore } from '$lib/com-ext.svelte';
   import { runComExtHooks, runComExtWorkflow } from '$lib/com-ext-workflow';
+  import { runComExtHandlers } from '$lib/com-ext-handlers';
   import { formatUserFacingError } from '$lib/user-facing-errors';
   import type { AccessGrantFormValue } from '$lib/access-grants';
   import type { AccessRulesRecord } from '$lib/access-rules';
@@ -1289,8 +1290,28 @@
     selectRow(event, 'folder', folder.id);
   }
 
+  async function activateDocument(doc: ServerDocumentEntry) {
+    // Paginated or remembered rows may omit the digest. Refresh that one
+    // document before handing it to a plugin; a stale/missing hash must never
+    // make a locally modified copy look like the current server revision.
+    const current = doc.sha256 != null
+      ? doc
+      : await listDirectory(currentFolderId)
+          .then((listing) => listing.documents.find((entry) => entry.id === doc.id) ?? doc)
+          .catch(() => doc);
+    const handled = await runComExtHandlers('file.activate', {
+      documentId: current.id,
+      filename: current.title,
+      folderId: currentFolderId,
+      pathParts: breadcrumbSegments.map((segment) => segment.label),
+      sha256: current.sha256 ?? null,
+      size: current.size,
+    });
+    if (!handled) await handleDownload(doc);
+  }
+
   function handleDocumentActivate(doc: ServerDocumentEntry) {
-    if (!coarsePointer && !selectMode) void handleDownload(doc);
+    if (!coarsePointer && !selectMode) void activateDocument(doc);
   }
 
   function handleFolderActivate(folder: ServerDirectoryEntry) {
@@ -1349,7 +1370,7 @@
     if (event.key === 'Enter') {
       event.preventDefault();
       if (row.kind === 'folder') void handleNavigate(row.folder.id, row.folder.name);
-      else void handleDownload(row.document);
+      else void activateDocument(row.document);
       return;
     }
 

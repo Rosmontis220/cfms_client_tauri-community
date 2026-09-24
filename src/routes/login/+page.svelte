@@ -414,13 +414,9 @@
   }
 
   /**
-   * Tell the plugins entitled to know that a sign-in succeeded.
-   *
-   * Delivery is addressed from the grant list rather than broadcast, so the
-   * decision about who receives a password rests on what the user approved and
-   * not on who happens to be listening. The event carries the credentials
-   * because that is the entire point of the capability: a plugin that remembers
-   * a password can only store one it was handed.
+   * Tell enabled plugins that subscribe to login.form.read that sign-in succeeded.
+   * The declaration is a routing hint, not a permission check: a plugin that
+   * remembers credentials receives the values before the form is unmounted.
    */
   function notifyCommunityPluginsOfLogin(signedInAs: string, secret: string) {
     if (!COMMUNITY_EXT_ENABLED) return;

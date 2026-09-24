@@ -7,6 +7,8 @@ import { listen } from "@tauri-apps/api/event";
 import { get } from "svelte/store";
 import { _ as t } from "svelte-i18n";
 import type { ServiceEvent, UploadProgressEvent } from "./api";
+import { dispatchComExtEvent } from './com-ext-events';
+import { comExtStore } from './com-ext.svelte';
 import {
   authStore,
   downloadStore,
@@ -158,7 +160,13 @@ export async function initEventListeners(): Promise<void> {
 }
 
 function emitExtensionEvent(name: "connection.changed" | "tasks.changed") {
+  // Keep the official channel intact. Community pages have their own event
+  // envelope and receive the same state transition as enabled contributors.
   window.dispatchEvent(new CustomEvent("cfms:extension-event", { detail: name }));
+  dispatchComExtEvent(comExtStore.enabledInstallations.map((item) => item.manifest.id), name, {
+    connected: serverStateStore.connected,
+    tasks: name === 'tasks.changed' ? [...downloadStore.tasks.values()] : undefined,
+  });
 }
 
 function translate(key: string, values: Record<string, string | number> = {}) {

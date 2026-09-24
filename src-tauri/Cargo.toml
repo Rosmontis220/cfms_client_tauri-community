@@ -39,6 +39,8 @@ hex = "0.4.3"
 reqwest.workspace = true
 rustls.workspace = true
 semver.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
 url.workspace = true
 fluent-bundle.workspace = true
 unic-langid.workspace = true
@@ -61,6 +63,3 @@ webpki-roots.workspace = true
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
-
-[dev-dependencies]
-tempfile.workspace = true

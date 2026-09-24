@@ -197,10 +197,13 @@ pub async fn get_document(
                 .unwrap_or_else(|_| std::path::PathBuf::from("."))
         });
 
-    // Ensure the download directory exists.
-    let _ = std::fs::create_dir_all(&download_root);
-
-    let file_path = download_root.join(&filename);
+    // Ensure both the download root and any nested plugin-supplied path exist.
+    // `filename` is a relative path, validated by the transfer task boundary.
+    let file_path = resolve_download_subdirectory(download_root, &filename)?;
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create download directory: {e}"))?;
+    }
     let display_filename = download_display_filename(&filename);
     let now = unix_now();
 

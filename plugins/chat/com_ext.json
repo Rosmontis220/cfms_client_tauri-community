@@ -1,0 +1,27 @@
+{
+  "format": "cfmscomext",
+  "schema_version": 1,
+  "id": "org.cfms.chat",
+  "name": "聊天记录",
+  "description": "浏览服务器或本地聊天记录，查看回复与附件，并为房间和用户设置显示名称。参考 cfms_client_tauri-custom 聊天页实现。",
+  "publisher": "CFMS Community (based on DoubleCircle's custom client)",
+  "version": "1.0.0",
+  "com_ext_api": "1.0.0",
+  "min_client_version": "1.0.0",
+  "requested_capabilities": [
+    "server.path.resolve",
+    "server.directory.list",
+    "server.document.readText",
+    "server.document.download",
+    "local.folder.choose",
+    "local.directory.scan",
+    "local.path.open",
+    "storage.read",
+    "storage.write"
+  ],
+  "entrypoints": {
+    "pages": [{ "id": "chat", "label": "聊天记录", "page": "chat" }],
+    "navigation": [{ "id": "chat", "label": "聊天记录", "icon": "history", "page": "chat", "order": 30 }]
+  },
+  "background_triggers": []
+}

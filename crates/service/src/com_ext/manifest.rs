@@ -8,9 +8,7 @@
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use super::{
-    COM_EXT_API_VERSION, COM_EXT_CAPABILITIES, COM_EXT_FORMAT,
-};
+use super::{COM_EXT_API_VERSION, COM_EXT_FORMAT};
 
 /// Regions a package may render one of its page documents into.
 ///
@@ -51,14 +49,18 @@ pub const COM_EXT_ACTION_POINTS: &[&str] = &[
 
 /// Flow hooks a package may attach to.
 ///
-/// `beforeDocumentOpen` is the only *intercepting* hook: the host waits for its
-/// result and honours `allow` / `deny` / `handled`.
+/// Workflow hooks are observational; `beforeDocumentOpen` reports an upcoming
+/// download but does not intercept it. Foreground interception is provided by
+/// a page-backed `file.activate` handler instead.
 pub const COM_EXT_HOOK_POINTS: &[&str] = &[
     "beforeDocumentOpen",
     "afterDownloadEnqueue",
     "onLogin",
     "onLogout",
 ];
+
+/// File-level handler interception points.
+pub const COM_EXT_HANDLER_POINTS: &[&str] = &["file.activate"];
 
 /// Longest accepted plugin identifier.
 const MAX_ID_LEN: usize = 128;
@@ -121,6 +123,9 @@ pub struct ComExtEntrypoints {
     /// Flow hooks.
     #[serde(default)]
     pub hooks: Vec<ComExtHookEntry>,
+    /// Generic page-backed interception handlers.
+    #[serde(default)]
+    pub handlers: Vec<ComExtHandlerEntry>,
     /// Wholesale replacements of host surfaces. Not honoured yet: a non-empty
     /// list is rejected rather than accepted and ignored.
     #[serde(default)]
@@ -186,6 +191,18 @@ pub struct ComExtHookEntry {
     pub workflow: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComExtHandlerEntry {
+    pub id: String,
+    /// One of [`COM_EXT_HANDLER_POINTS`].
+    pub point: String,
+    /// HTML page id inside this package.
+    pub page: String,
+    #[serde(default)]
+    pub order: i32,
+}
+
 /// A wholesale replacement of a host surface.
 ///
 /// The shape is reserved but not honoured: [`validate_entrypoints`] refuses a
@@ -245,6 +262,9 @@ pub fn referenced_pages(manifest: &ComExtManifest) -> Vec<(&str, &str)> {
         out.push((entry.id.as_str(), entry.page.as_str()));
     }
     for entry in &manifest.entrypoints.overrides {
+        out.push((entry.id.as_str(), entry.page.as_str()));
+    }
+    for entry in &manifest.entrypoints.handlers {
         out.push((entry.id.as_str(), entry.page.as_str()));
     }
     out
@@ -307,24 +327,11 @@ pub fn validate_manifest(manifest: &ComExtManifest) -> Result<(), String> {
         })?;
     }
 
-    validate_capabilities(&manifest.requested_capabilities)?;
+    // Keep requested_capabilities as optional package metadata for compatibility.
+    // Community plugins are unrestricted: unknown capability names are retained and
+    // never block installation or enablement.
     validate_entrypoints(&manifest.entrypoints)?;
     validate_triggers(&manifest.background_triggers)?;
-    Ok(())
-}
-
-fn validate_capabilities(capabilities: &[String]) -> Result<(), String> {
-    let mut seen = std::collections::BTreeSet::new();
-    for capability in capabilities {
-        if !COM_EXT_CAPABILITIES.contains(&capability.as_str()) {
-            return Err(format!(
-                "Package requests unknown capability \"{capability}\""
-            ));
-        }
-        if !seen.insert(capability.as_str()) {
-            return Err(format!("Package requests capability \"{capability}\" twice"));
-        }
-    }
     Ok(())
 }
 
@@ -395,6 +402,16 @@ fn validate_entrypoints(entrypoints: &ComExtEntrypoints) -> Result<(), String> {
             ));
         }
         unique(&mut actions, &entry.id)?;
+    }
+
+    let mut handlers = std::collections::BTreeSet::new();
+    for entry in &entrypoints.handlers {
+        validate_entry_id(&entry.id)?;
+        validate_entry_id(&entry.page)?;
+        if !COM_EXT_HANDLER_POINTS.contains(&entry.point.as_str()) {
+            return Err(format!("Unknown handler point \"{}\"", entry.point));
+        }
+        unique(&mut handlers, &entry.id)?;
     }
 
     let mut hooks = std::collections::BTreeSet::new();

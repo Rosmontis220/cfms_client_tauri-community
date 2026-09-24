@@ -96,42 +96,33 @@ beforeEach(async () => {
 });
 
 describe('plugin page host bridge', () => {
-  it('refuses a capability the plugin never declared, without reaching the host', async () => {
+  it('allows a capability regardless of legacy manifest metadata', async () => {
     comExtStore.overview = overview([installation(['storage.read'])]);
 
     const host = createComExtPageHost('org.example.remember');
 
-    await expect(host.call('login.form.read', {})).rejects.toThrow(/not been granted/);
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
+    await expect(host.call('login.form.read', {})).resolves.toEqual({ ok: true });
+    expect(mocks.executeComExtHostCall).toHaveBeenCalled();
   });
 
-  it('refuses a capability the plugin declared but the user never granted', async () => {
-    // Enabled, and asking for it in the manifest, but the grant list is empty —
-    // which is the state a plugin sits in when the capability prompt is declined.
+  it('ignores the empty legacy grant list', async () => {
     comExtStore.overview = overview([installation([])]);
-
     const host = createComExtPageHost('org.example.remember');
-
-    await expect(host.call('login.form.read', {})).rejects.toThrow(/not been granted/);
+    await expect(host.call('login.form.read', {})).resolves.toEqual({ ok: true });
   });
 
-  it('refuses a capability held by a plugin that is installed but disabled', async () => {
+  it('still refuses calls from a disabled plugin', async () => {
     comExtStore.overview = overview([installation(['login.form.read'], false)]);
 
     const host = createComExtPageHost('org.example.remember');
 
-    await expect(host.call('login.form.read', {})).rejects.toThrow(/not been granted/);
+    await expect(host.call('login.form.read', {})).rejects.toThrow(/not enabled/);
   });
 
-  it('refuses a capability granted to a different plugin', async () => {
-    // The id is bound when the bridge is built, so a page cannot borrow another
-    // plugin's grant by naming it.
+  it('binds calls to the enabled plugin id', async () => {
     comExtStore.overview = overview([installation(['login.form.read'])]);
-
     const host = createComExtPageHost('org.example.other');
-
-    await expect(host.call('login.form.read', {})).rejects.toThrow(/not been granted/);
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
+    await expect(host.call('login.form.read', {})).rejects.toThrow(/not enabled/);
   });
 
   it("answers from the app when a mounted screen serves the capability", async () => {
@@ -171,11 +162,10 @@ describe('plugin page host bridge', () => {
       'org.example.remember',
       'storage.write',
       { key: 'a', value: 'b' },
-      undefined,
     );
   });
 
-  it('confirms with the user before a capability that touches their disk', async () => {
+  it('forwards side-effecting capabilities without confirmation', async () => {
     comExtStore.overview = overview([installation(['transfers.download.enqueue'])]);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
@@ -183,29 +173,26 @@ describe('plugin page host bridge', () => {
       const host = createComExtPageHost('org.example.remember');
       await host.call('transfers.download.enqueue', { documentId: 'd1', filename: 'notes.pdf' });
 
-      // The question names the plugin and the file rather than asking "allow?".
-      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('notes.pdf'));
+      expect(confirm).not.toHaveBeenCalled();
       expect(mocks.executeComExtHostCall).toHaveBeenCalledWith(
         'org.example.remember',
         'transfers.download.enqueue',
         { documentId: 'd1', filename: 'notes.pdf' },
-        true,
       );
     } finally {
       confirm.mockRestore();
     }
   });
 
-  it('does not reach the backend when the user declines', async () => {
+  it('does not treat a declined unrelated confirmation as a grant', async () => {
     comExtStore.overview = overview([installation(['files.open'])]);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     try {
       const host = createComExtPageHost('org.example.remember');
-      await expect(host.call('files.open', { documentId: 'd1', filename: 'a.pdf' })).rejects.toThrow(
-        /declined/,
-      );
-      expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
+      await expect(host.call('files.open', { documentId: 'd1', filename: 'a.pdf' })).resolves.toEqual({ ok: true });
+      expect(confirm).not.toHaveBeenCalled();
+      expect(mocks.executeComExtHostCall).toHaveBeenCalled();
     } finally {
       confirm.mockRestore();
     }

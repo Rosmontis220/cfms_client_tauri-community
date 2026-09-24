@@ -736,17 +736,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_capability() {
+    fn accepts_future_capability_names() {
         let manifest = manifest_json("org.example.test", "").replace(
             r#"["files.list"]"#,
-            r#"["files.list","files.write"]"#,
+            r#"["files.list","server.custom.future_action"]"#,
         );
         let package = build(&[
             ("com_ext.json", manifest.as_bytes()),
             ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
         ]);
-        let error = validate_package(&package).expect_err("must be rejected");
-        assert!(error.contains("unknown capability"), "got: {error}");
+        validate_package(&package).expect("community capabilities are descriptive metadata");
     }
 
     #[test]
@@ -818,6 +817,23 @@ mod tests {
         ]);
 
         validate_package(&package).expect("login-section must be a known point");
+    }
+
+    #[test]
+    fn accepts_html_page_backed_file_activation_handler() {
+        let package = build(&[
+            (
+                "com_ext.json",
+                manifest_json(
+                    "org.example.test",
+                    r#", "handlers": [{"id":"open","point":"file.activate","page":"handler","order":10}]"#,
+                )
+                .as_bytes(),
+            ),
+            ("pages/home.json", br#"{"schema_version":1,"title":"Home","blocks":[]}"#),
+            ("pages/handler.html", b"<script>host.handle('file.activate', () => 'handled')</script>"),
+        ]);
+        validate_package(&package).expect("handler page must be classified as a page, not workflow");
     }
 
     #[test]

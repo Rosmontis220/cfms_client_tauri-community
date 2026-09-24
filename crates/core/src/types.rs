@@ -410,6 +410,9 @@ pub struct ServerDocumentEntry {
     /// Last modification timestamp (Unix seconds).
     #[serde(default)]
     pub last_modified: Option<f64>,
+    /// Optional server-provided content digest for checking a local download.
+    #[serde(default)]
+    pub sha256: Option<String>,
 }
 
 /// Generic cursor-paginated response returned by CFMS protocol v15 list APIs.

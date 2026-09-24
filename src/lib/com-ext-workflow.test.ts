@@ -105,11 +105,10 @@ describe('community plugin workflow adapter', () => {
       'org.example.test',
       'tasks.read',
       {},
-      undefined,
     );
   });
 
-  it('names the plugin when asking to open a file', async () => {
+  it('opens a file without per-capability confirmation', async () => {
     mocks.readComExtWorkflow.mockResolvedValue(
       workflow([
         {
@@ -123,18 +122,15 @@ describe('community plugin workflow adapter', () => {
 
     await runComExtWorkflow('org.example.test', 'open');
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Allow community plugin "Test Plugin" to open report.pdf?',
-    );
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(mocks.executeComExtHostCall).toHaveBeenCalledWith(
       'org.example.test',
       'files.open',
       { documentId: 'doc-1', filename: 'report.pdf' },
-      true,
     );
   });
 
-  it('does not open a file when the user declines', async () => {
+  it('ignores a global confirmation decline when the workflow does not request consent', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     mocks.readComExtWorkflow.mockResolvedValue(
       workflow([
@@ -142,24 +138,24 @@ describe('community plugin workflow adapter', () => {
       ]),
     );
 
-    await expect(runComExtWorkflow('org.example.test', 'open')).rejects.toThrow(/cancelled/i);
-
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
+    await runComExtWorkflow('org.example.test', 'open');
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(mocks.executeComExtHostCall).toHaveBeenCalledWith('org.example.test', 'files.open', { documentId: 'd' });
   });
 
-  it('falls back to the plugin id when the name is unknown', async () => {
-    comExtStore.overview = overview([]);
+  it('still supports explicit workflow confirmation nodes', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
     mocks.readComExtWorkflow.mockResolvedValue(
       workflow([
-        { id: 'a', type: 'host_call', capability: 'files.open', arguments: { documentId: 'd' } },
+        { id: 'a', type: 'confirm', message: 'Proceed?', if_confirmed: 'b', if_cancelled: 'c' },
+        { id: 'b', type: 'host_call', capability: 'files.open', arguments: { documentId: 'd' } },
+        { id: 'c', type: 'result', value: 'declined' },
       ]),
     );
 
-    await runComExtWorkflow('org.gone.plugin', 'open');
-
-    expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining('org.gone.plugin'),
-    );
+    await expect(runComExtWorkflow('org.example.test', 'open')).resolves.toEqual('declined');
+    expect(window.confirm).toHaveBeenCalledWith('Proceed?');
+    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
   });
 });
 
@@ -208,7 +204,7 @@ describe('community plugin hook registry', () => {
     );
   });
 
-  it('runs hooks as background work, so a hook cannot prompt', async () => {
+  it('runs hooks as background work without capability prompts', async () => {
     comExtStore.overview = overview([
       withHooks([{ id: 'a', point: 'beforeDocumentOpen', workflow: 'peek' }]),
     ]);
@@ -225,10 +221,11 @@ describe('community plugin hook registry', () => {
 
     await runComExtHooks('beforeDocumentOpen');
 
-    // The engine refuses rather than prompting, and the hook layer swallows it.
+    // Capability calls remain available in background work; explicit workflow
+    // confirm nodes, rather than host capabilities, control UI prompts.
     expect(window.confirm).not.toHaveBeenCalled();
-    expect(mocks.executeComExtHostCall).not.toHaveBeenCalled();
-    expect(mocks.warn).toHaveBeenCalled();
+    expect(mocks.executeComExtHostCall).toHaveBeenCalledWith('org.example.test', 'files.open', { documentId: 'd' });
+    expect(mocks.warn).not.toHaveBeenCalled();
   });
 
   it('passes the triggering context to the hook workflow', async () => {

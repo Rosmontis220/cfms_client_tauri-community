@@ -3,9 +3,8 @@
   import { goto } from '$app/navigation';
   import { open } from '@tauri-apps/plugin-dialog';
   import { _ as t } from 'svelte-i18n';
-  import { type ComExtCapability, type ComExtInstallation } from '$lib/api/com-ext';
+  import { type ComExtInstallation } from '$lib/api/com-ext';
   import { comExtStore } from '$lib/com-ext.svelte';
-  import { CAPABILITY_LABEL_KEYS } from '$lib/com-ext-capability-labels';
   import { COMMUNITY_EXT_ENABLED } from '$lib/feature-flags';
   import { notificationStore } from '$lib/stores.svelte';
   import { isMobilePlatform } from '$lib/platform';
@@ -35,19 +34,10 @@
     busy = 'import';
     try {
       const installed = await comExtStore.importPackage(selected);
-      // A plugin that asks for nothing has nothing to be gated on, so making
-      // the user take a second step to enable it would be ceremony. One that
-      // asks for capabilities still waits for an explicit decision.
-      if (installed.manifest.requested_capabilities.length === 0) {
-        await comExtStore.changeEnabled(installed.manifest.id, true);
-        notificationStore.success(
-          $t('settings.comExt.installCompleteEnabled', { values: { name: installed.manifest.name } }),
-        );
-      } else {
-        notificationStore.success(
-          $t('settings.comExt.installComplete', { values: { name: installed.manifest.name } }),
-        );
-      }
+      await comExtStore.changeEnabled(installed.manifest.id, true);
+      notificationStore.success(
+        $t('settings.comExt.installCompleteEnabled', { values: { name: installed.manifest.name } }),
+      );
     } catch (error) {
       notificationStore.error(`${$t('settings.comExt.installFailed')}: ${formatError(error)}`);
     } finally {
@@ -57,11 +47,6 @@
 
   async function toggle(installation: ComExtInstallation) {
     const enable = !installation.enabled;
-    if (enable && installation.manifest.requested_capabilities.length > 0) {
-      const list = installation.manifest.requested_capabilities.map(capabilityLabel).join('\n• ');
-      const prompt = `${$t('settings.comExt.enableConfirm', { values: { name: installation.manifest.name } })}\n\n• ${list}`;
-      if (!window.confirm(prompt)) return;
-    }
     busy = installation.manifest.id;
     try {
       await comExtStore.changeEnabled(installation.manifest.id, enable);
@@ -86,10 +71,6 @@
     } finally {
       busy = null;
     }
-  }
-
-  function capabilityLabel(capability: ComExtCapability): string {
-    return $t(CAPABILITY_LABEL_KEYS[capability]);
   }
 
   function formatBytes(value: number): string {
@@ -165,26 +146,6 @@
                 <span></span>
               </label>
 
-              <details>
-                <summary>
-                  {installation.manifest.requested_capabilities.length > 0
-                    ? $t('settings.comExt.permissions')
-                    : $t('settings.comExt.noPermissions')}
-                </summary>
-                {#if installation.manifest.requested_capabilities.length > 0}
-                  <ul>
-                    {#each installation.manifest.requested_capabilities as capability}
-                      <li>
-                        {capabilityLabel(capability)}
-                        {#if installation.granted_capabilities.includes(capability)}
-                          <em>· {$t('settings.comExt.granted')}</em>
-                        {/if}
-                      </li>
-                    {/each}
-                  </ul>
-                {/if}
-              </details>
-
               <div class="card-actions">
                 <button type="button" class="danger" disabled={busy !== null} onclick={() => uninstall(installation)}>
                   {$t('settings.comExt.uninstall')}
@@ -207,7 +168,7 @@
       </div>
       <ul class="capability-list">
         {#each comExtStore.overview?.capabilities ?? [] as capability}
-          <li><code>{capability}</code><span>{capabilityLabel(capability)}</span></li>
+          <li><code>{capability}</code></li>
         {/each}
       </ul>
     </section>
@@ -237,10 +198,7 @@
   .plugin-copy h3 { font-size: .88rem; font-weight: 650; }
   .plugin-copy p { margin: .1rem 0 .25rem; }
   .plugin-copy small { color: var(--explorer-text-muted); font-size: .68rem; }
-  details, .card-actions { grid-column: 2 / -1; }
-  details { font-size: .72rem; color: var(--explorer-text-muted); }
-  details ul { padding: .4rem 1rem; list-style: disc; }
-  details em { font-style: normal; color: var(--explorer-accent); }
+  .card-actions { grid-column: 2 / -1; }
   .card-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
   .switch input { position: absolute; opacity: 0; }
   .switch span { display: block; width: 38px; height: 22px; border-radius: 999px; background: var(--explorer-border-strong); padding: 3px; transition: background 140ms ease; }
@@ -251,11 +209,10 @@
   .empty :global(.material-symbols-rounded) { color: var(--explorer-text-muted); }
   .capability-list { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
   .capability-list li { display: flex; gap: .6rem; align-items: baseline; border: 1px solid var(--explorer-border); border-radius: 8px; padding: .45rem .6rem; background: var(--explorer-surface-raised); }
-  .capability-list span { color: var(--explorer-text-muted); font-size: .74rem; }
   @media (max-width: 650px) {
     .com-ext-page { padding: 1rem; }
     header { align-items: flex-start; }
     .plugin-card { grid-template-columns: 40px minmax(0, 1fr) auto; }
-    details, .card-actions { grid-column: 1 / -1; }
+    .card-actions { grid-column: 1 / -1; }
   }
 </style>

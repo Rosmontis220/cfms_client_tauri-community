@@ -61,8 +61,8 @@ pnpm plugin:pack my-plugin
 ```
 
 Then **Settings → Community plugins → Import**, and pick
-`my-plugin.cfmscomext`. A plugin that requests no capabilities is enabled on
-install, so its navigation entry appears immediately.
+`my-plugin.cfmscomext`. Imported plugins are enabled on install regardless of
+legacy `requested_capabilities`, so their navigation entries appear immediately.
 
 ## A page is one self-contained file
 
@@ -98,8 +98,11 @@ that needs a library can bundle it in.
 | Member | What it does |
 | ------ | ------------ |
 | `host.pluginId` | your id, bound when the bridge was built |
-| `host.call(capability, args?)` | asks the host for a capability you declared, and resolves with its result |
+| `host.call(capability, args?)` | asks the host for an operation and resolves with its result; legacy capability metadata is optional |
 | `host.on(event, handler)` | subscribes to an event addressed to your plugin; returns the unsubscribe function |
+| `host.handle(point, handler)` | registers a page-backed action interceptor; return `handled` or `continue` |
+| `host.invoke(command, args?)` | invokes an existing Tauri command directly, with no per-plugin capability registry |
+| `host.listen(event, handler)` | listens to a Tauri event; resolves with an unsubscribe function |
 
 ```html
 <button id="stamp">记一笔</button>
@@ -111,11 +114,10 @@ that needs a library can bundle it in.
 </script>
 ```
 
-`call` checks your grant before it does anything, so a capability you did not
-declare — or one the user declined when enabling you — rejects instead of
-silently doing nothing. A capability that touches the user's disk
-(`files.open`, `transfers.download.enqueue`) asks for confirmation first, and
-rejects when the user declines.
+`call` works for an enabled plugin without a capability grant or per-call
+consent prompt. Operations can still fail because the host operation is
+unavailable or its arguments are invalid. Plugins may explicitly call
+`ui.confirm` when they want to ask the user before an action.
 
 `on` exists because a host command is request/response: without it the host
 could never tell your page that anything happened. It delivers only events
@@ -153,13 +155,13 @@ error, not a preference.
 | `version` | semver; a higher version replaces a lower one on re-import |
 | `com_ext_api` | the interface version you target; major must match the host |
 | `min_client_version` | oldest app version you support |
-| `requested_capabilities` | host APIs you need; see below. Empty means the plugin cannot reach the host at all |
+| `requested_capabilities` | optional legacy metadata; neither omitted nor unknown names restrict installation or calls |
 | `entrypoints` | what you contribute; see below |
 | `background_triggers` | must be empty on this host version |
 
-Unknown fields, and unknown values in known fields, are **rejected at install**
-rather than ignored. A package that would install and then silently do nothing
-is treated as a mistake.
+Unknown structural fields and unsupported entrypoint points are rejected at
+install rather than silently ignored. `requested_capabilities` is legacy
+informational metadata: unknown names in this list are accepted.
 
 ### Entrypoints
 
@@ -170,7 +172,15 @@ is treated as a mistake.
 | `settings` | adds an entry under Settings |
 | `slots` | renders a page into a region of a host screen. Supported points: `overview-section`, `settings-section`, `login-section` |
 | `actions` | adds a command. Supported points: `file-toolbar`, `file-context-menu` |
-| `hooks` | runs a workflow on a lifecycle event: `beforeDocumentOpen`, `afterDownloadEnqueue`, `onLogin`, `onLogout` |
+| `hooks` | runs an observational workflow on a lifecycle event: `beforeDocumentOpen`, `afterDownloadEnqueue`, `onLogin`, `onLogout` |
+| `handlers` | mounts an HTML page to intercept a foreground action; supported point: `file.activate`; fields: `id`, `point`, `page`, optional `order` |
+
+A handler page registers `host.handle('file.activate', async (context) => 'handled')`.
+The host awaits it on document double-click and keyboard Enter. Return `continue`
+to let the built-in download run; return `handled` to suppress it. The context
+includes `documentId`, `filename`, `folderId`, `pathParts`, `sha256`, and `size`.
+Handler pages mount invisibly on first use, then remain mounted while enabled;
+their subscriptions are disposed when the plugin is disabled or removed.
 
 `slots`, `actions`, and `hooks` carry your own page or workflow documents under
 `slots/`, `workflows/`, and `hooks/`. `actions` and `hooks` are declarative
@@ -179,8 +189,8 @@ workflows, not code; see
 node and expression vocabulary.
 
 A `navigation` entry is **device-level, not account-level**. Once someone is
-signed in it appears in the workspace sidebar; on the signed-out screens it
-appears in the top-right toolbar beside Settings. A plugin page is therefore
+signed in it appears in the workspace sidebar; before sign-in its launcher
+appears only on the server-address screen beside Settings. A plugin page is therefore
 reachable with no account and no server connection at all — which is what makes
 a compute-only plugin useful before anyone signs in, and is why the page route
 is not behind the sign-in gate.
@@ -191,19 +201,27 @@ work without an account or say so on the page.
 
 ### Capabilities
 
-A plugin reaches the host only through capabilities it declared **and** that
-were granted when it was enabled. Capabilities are re-checked inside the host on
-every call, so a frontend check is never the only gate.
+Enabled community plugins can call supported host operations without declaring
+or receiving grants. The following names describe existing operations; this list
+is not an allow-list for future extensions.
 
-| Capability | Grants |
-| ---------- | ------ |
+| Operation | Result or purpose |
+| --------- | ----------------- |
+| `server.action` | `{action,payload}` → complete server Response envelope |
+| `server.path.resolve`, `server.directory.list` | resolve a node path / list a folder |
+| `server.document.readText`, `server.document.download` | read UTF-8 from a server document / enqueue its download |
+| `local.folder.choose`, `local.directory.scan` | pick a local folder / enumerate chatbox-style room records |
+| `local.folder.scan`, `local.file.readText`, `local.file.writeText` | generic local filesystem primitives |
+| `local.path.open` | open a local file with the platform handler |
+| `local.document.state`, `local.document.open` | hash and open a document under the client download root |
+| `tasks.wait` | await a download task until terminal state or timeout |
 | `account.summary.read` | read the signed-in account summary |
 | `tasks.read` | read the task lists |
 | `files.list` | list a server directory |
 | `files.search` | search server files |
 | `files.metadata.read` | read a file's metadata |
-| `files.open` | open a file — **always asks the user first** |
-| `transfers.download.enqueue` | queue a download — **always asks the user first** |
+| `files.open` | open a file |
+| `transfers.download.enqueue` | queue a download |
 | `events.subscribe` | subscribe to host events |
 | `ui.notify` | show a notification |
 | `ui.confirm` | ask the user to confirm |
@@ -211,8 +229,8 @@ every call, so a frontend check is never the only gate.
 | `login.form.read` | read what the sign-in form holds: username, password, server |
 | `login.form.fill` | put a username and password into the sign-in form |
 
-A plugin that computes on its own — a converter, a cipher tool — needs **none**
-of these, and an empty list keeps it incapable of touching the host at all.
+A plugin that computes on its own needs no host operations. An empty legacy
+capability list does not prevent an enabled plugin from calling host operations.
 
 ### The sign-in screen
 
@@ -220,15 +238,15 @@ Two things are worth knowing before you attach to `login-section`.
 
 **`login.form.*` is served by the app, not the backend.** The sign-in form is
 component state in the running UI, so no command can read it; the app answers
-those two itself, for exactly as long as the sign-in screen is mounted. Your
-grant is still checked before either one runs, and the result is the same either
-way — you never have to know which half of the host answers a capability.
+those two itself, for exactly as long as the sign-in screen is mounted. The
+same bridge handles both halves without requiring a grant.
 
 **The host tells you when a sign-in succeeds.**
 `host.on('login.succeeded', …)` delivers `{ username, password }` immediately
 before the app drops its own copies, which is the last moment they exist. It is
-addressed only to plugins holding `login.form.read`, because holding that is what
-entitles you to them. There is no `login.failed`: nothing is gained by being told
+addressed to enabled plugins that subscribe to the login form event; legacy
+`login.form.read` metadata may identify interested older plugins, but is not a
+grant. There is no `login.failed`: nothing is gained by being told
 about a password the server rejected.
 
 Two properties of that delivery are load-bearing, and both have bitten this

@@ -13,20 +13,6 @@ import {
 } from '$lib/api/com-ext';
 
 /**
- * Capabilities that cause a real, user-visible side effect.
- *
- * Both of these put a file on the user's disk, so the broker refuses to forward
- * them unless the caller has obtained explicit confirmation.  The backend
- * enforces the same rule, so this is defence in depth rather than the only
- * barrier.
- *
- * Exported because the workflow engine needs the same list: if the two
- * disagreed, a workflow could either prompt twice or skip the prompt entirely.
- */
-export const COM_EXT_SIDE_EFFECTING_CAPABILITIES: ReadonlySet<ComExtCapability> =
-  new Set(['files.open', 'transfers.download.enqueue']);
-
-/**
  * Community plugin state.
  *
  * Separate from `extensionsStore`, which tracks the official extension
@@ -56,30 +42,36 @@ class ComExtStore {
   }
 
   /**
-   * Whether an enabled plugin holds a granted capability.
-   *
-   * The backend re-checks this for every call it answers, so this is not the
-   * only barrier. It is the *first* one for the capabilities the backend never
-   * sees: the running app answers those itself, and without this check a page
-   * could reach one the user was never asked about.
+   * Whether a plugin is enabled. Legacy capability metadata cannot restrict it.
    */
-  grants(pluginId: string, capability: ComExtCapability): boolean {
+  grants(pluginId: string, _capability: ComExtCapability): boolean {
     const installation = this.installed.find((entry) => entry.manifest.id === pluginId);
-    return Boolean(
-      installation?.enabled && installation.granted_capabilities.includes(capability),
-    );
+    return Boolean(installation?.enabled);
   }
 
-  /**
-   * Ids of the enabled plugins that hold a granted capability.
-   *
-   * Used to address an event at the plugins entitled to receive it, so the
-   * decision is made from the grant list rather than by whoever is listening.
-   */
+  /** Ids of enabled plugins that subscribe to a capability event. */
   pluginsGranting(capability: ComExtCapability): string[] {
     return this.enabledInstallations
-      .filter((installation) => installation.granted_capabilities.includes(capability))
+      .filter((installation) =>
+        installation.manifest.requested_capabilities.length === 0 ||
+        installation.manifest.requested_capabilities.includes(capability),
+      )
       .map((installation) => installation.manifest.id);
+  }
+
+  /** Enabled page-backed handlers for a host interception point, in order. */
+  handlerContributors(point: string): Array<{
+    pluginId: string;
+    packageDigest: string;
+    entry: NonNullable<ComExtInstallation['manifest']['entrypoints']['handlers']>[number];
+  }> {
+    return this.enabledInstallations
+      .flatMap((installation) =>
+        (installation.manifest.entrypoints.handlers ?? [])
+          .filter((entry) => entry.point === point)
+          .map((entry) => ({ pluginId: installation.manifest.id, packageDigest: installation.package_digest, entry })),
+      )
+      .sort((left, right) => left.entry.order - right.entry.order);
   }
 
   /** Plugins that contribute an action to a given action point. */
@@ -155,34 +147,13 @@ class ComExtStore {
     await this.refresh();
   }
 
-  /**
-   * Invoke a host capability on behalf of a plugin.
-   *
-   * `confirm` is consulted only for side-effecting capabilities; when it is
-   * absent or declines, the call is refused without reaching the backend.
-   */
+  /** Forward a plugin host call without capability-specific consent gates. */
   async callHost<T = unknown>(
     pluginId: string,
     capability: ComExtCapability,
     args: Record<string, unknown> = {},
-    confirm?: (summary: string) => boolean,
   ): Promise<T> {
-    let userConfirmed: boolean | undefined;
-
-    if (COM_EXT_SIDE_EFFECTING_CAPABILITIES.has(capability)) {
-      const summary =
-        typeof args.filename === 'string'
-          ? args.filename
-          : typeof args.documentId === 'string'
-            ? args.documentId
-            : '';
-      if (!confirm?.(summary)) {
-        throw new Error('The user declined this action.');
-      }
-      userConfirmed = true;
-    }
-
-    return executeComExtHostCall<T>(pluginId, capability, args, userConfirmed);
+    return executeComExtHostCall<T>(pluginId, capability, args);
   }
 }
 

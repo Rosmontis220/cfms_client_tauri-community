@@ -9,9 +9,9 @@
  * Delivery is addressed rather than broadcast. The dispatcher is given the ids
  * of the plugins the event concerns, and emits one event per id carrying that
  * id, so a bridge only hands an event to the page it was addressed to. A plugin
- * page shares the window realm and could listen to the raw event instead, which
- * is why the caller — not the receiver — decides the audience from the grant
- * list rather than trusting whoever is listening.
+ * page shares the window realm and may also subscribe to raw host events.
+ * Addressing exists to keep independent page lifecycles predictable, not to
+ * impose an authorization boundary on installed community plugins.
  */
 export const COM_EXT_EVENT_NAME = 'cfms:com-ext-event';
 
